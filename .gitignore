@@ -1,0 +1,14 @@
+node_modules
+.pnpm-store
+.turbo
+.next
+dist
+build
+.DS_Store
+.env
+.env.*
+pnpm-lock.yaml
+*.log
+tmp
+.idea
+.vscode
