@@ -5,7 +5,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(4000),
   HOST_JWT_SECRET: z.string().min(8).default("podster-host-secret"),
   GUEST_JWT_SECRET: z.string().min(8).default("podster-guest-secret"),
-  STORAGE_ENDPOINT: z.string().url().default("https://example.r2.cloudflarestorage.com"),
+  STORAGE_ENDPOINT: z.string().default(""),
   STORAGE_REGION: z.string().default("auto"),
   STORAGE_ACCESS_KEY: z.string().default(""),
   STORAGE_SECRET_KEY: z.string().default(""),

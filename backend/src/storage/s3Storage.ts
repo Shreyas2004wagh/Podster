@@ -19,7 +19,7 @@ export class S3StorageProvider implements StorageProvider {
   constructor() {
     this.s3 = new S3Client({
       region: env.STORAGE_REGION,
-      endpoint: env.STORAGE_ENDPOINT,
+      endpoint: env.STORAGE_ENDPOINT || undefined,
       credentials: {
         accessKeyId: env.STORAGE_ACCESS_KEY,
         secretAccessKey: env.STORAGE_SECRET_KEY
