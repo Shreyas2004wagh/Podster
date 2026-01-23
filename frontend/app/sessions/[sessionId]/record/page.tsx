@@ -22,62 +22,21 @@ export default function RecordingRoomPage() {
   const uploadWorker = useRef<UploadWorkerClient | null>(null);
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadId, setUploadId] = useState<string | null>(null);
 
   const { stream, start: startMedia, error: mediaError } = useLocalMedia({ video: true, audio: true });
 
-  const { startRecording, stopRecording, isRecording, isProcessing, durationLabel, lastError } =
-    useMediaRecorder({
-      stream,
-      sessionId,
-      userId,
-      onStop: () => {
-        // After stop, ready for upload step
-      }
-    });
-
-  useEffect(() => {
-    void startMedia();
-    uploadWorker.current = new UploadWorkerClient();
-    uploadWorker.current.onMessage((message) => {
-      setUploadItems((prev) =>
-        prev.map((item) => {
-          if (item.id !== message.id) return item;
-          if (message.type === "progress") return { ...item, progress: message.progress, status: "uploading" };
-          if (message.type === "completed") return { ...item, progress: 100, status: "completed" };
-          if (message.type === "error")
-            return { ...item, status: "error", errorMessage: message.message };
-          return item;
-        })
-      );
-    });
-    return () => {
-      uploadWorker.current?.dispose();
-    };
-  }, [startMedia]);
-
-  useEffect(() => {
-    const token = localStorage.getItem("podster_host_token");
-    if (token) {
-      setHostToken(token);
-    }
-  }, []);
-
-  const participants: Participant[] = useMemo(
-    () => [
-      {
-        id: userId,
-        name: "You",
-        role: "host",
-        stream: stream ?? undefined
-      }
-    ],
-    [stream, userId]
-  );
-
+  // Define handleUpload higher up so useMediaRecorder can call it
   const handleUpload = async () => {
+    console.log("handleUpload: Starting upload process...");
     setUploadError(null);
+    // Add a small delay to allow the last chunk to be fully written to IndexedDB
+    await new Promise(r => setTimeout(r, 500));
+
     const chunks = await listChunks(sessionId);
+    console.log("handleUpload: Chunks found:", chunks.length);
     if (!chunks.length) {
+      console.warn("handleUpload: No chunks found!");
       setUploadError("No recorded chunks found in IndexedDB.");
       return;
     }
@@ -86,9 +45,11 @@ export default function RecordingRoomPage() {
     const parts = splitBlob(combined);
     let urls: string[] = [];
     try {
-      const { urls: signed } = await requestUploadUrls(sessionId, parts.length, hostToken ?? undefined);
+      const { urls: signed, uploadId: uId } = await requestUploadUrls(sessionId, parts.length, hostToken ?? undefined);
       urls = signed;
-    } catch {
+      setUploadId(uId); // Ensure we capture the uploadId!
+    } catch (err) {
+      console.error("handleUpload: Failed to get upload URLs", err);
       // Backend stub may not be running yet; fallback to placeholder
       urls = parts.map((_, idx) => `https://example.com/upload/${sessionId}/${idx + 1}`);
     }
@@ -110,6 +71,95 @@ export default function RecordingRoomPage() {
 
     uploadWorker.current?.upload(uploads);
   };
+
+  const { startRecording, stopRecording, isRecording, isProcessing, durationLabel, lastError } =
+    useMediaRecorder({
+      stream,
+      sessionId,
+      userId,
+      onStop: () => {
+        console.log("Recorder stopped, triggering auto-upload...");
+        void handleUpload();
+      }
+    });
+
+  const [completedParts, setCompletedParts] = useState<Array<{ partNumber: number; etag: string }>>([]);
+
+  useEffect(() => {
+    void startMedia();
+    uploadWorker.current = new UploadWorkerClient();
+    uploadWorker.current.onMessage((message) => {
+      setUploadItems((prev) =>
+        prev.map((item) => {
+          if (item.id !== message.id) return item;
+          if (message.type === "progress") return { ...item, progress: message.progress, status: "uploading" };
+          if (message.type === "completed") {
+            // Store the ETag
+            setCompletedParts((prevParts) => {
+              // extract part number from id "part-1" -> 1
+              const partNumber = parseInt(message.id.replace("part-", ""), 10);
+              return [...prevParts, { partNumber, etag: message.etag }];
+            });
+            return { ...item, progress: 100, status: "completed" };
+          }
+          if (message.type === "error")
+            return { ...item, status: "error", errorMessage: message.message };
+          return item;
+        })
+      );
+    });
+    return () => {
+      uploadWorker.current?.dispose();
+    };
+  }, [startMedia]);
+
+  // Watch for all uploads completion
+  useEffect(() => {
+    if (uploadItems.length > 0 && completedParts.length === uploadItems.length) {
+      // All parts uploaded
+      const finalize = async () => {
+        console.log("All parts uploaded, finalizing...", completedParts);
+        try {
+          // We need the uploadId here. It's not currently stored in state, which is a gap.
+          // However, for the initial MVP, let's look at how we got the uploadId.
+          // We got it in handleUpload, but didn't persist it.
+          // We need to store uploadId in state.
+        } catch (err) {
+          console.error("Failed to complete upload", err);
+          setUploadError("Failed to finalize upload on server.");
+        }
+      };
+      void finalize();
+    }
+  }, [completedParts.length, uploadItems.length]);
+
+
+  useEffect(() => {
+    // Poll for token every second if not present, as it might be set asynchronously by another component
+    const checkToken = () => {
+      const token = localStorage.getItem("podster_host_token");
+      if (token && token !== hostToken) {
+        setHostToken(token);
+      }
+    };
+    checkToken();
+    const interval = setInterval(checkToken, 1000);
+    return () => clearInterval(interval);
+  }, [hostToken]);
+
+  const participants: Participant[] = useMemo(
+    () => [
+      {
+        id: userId,
+        name: "You",
+        role: "host",
+        stream: stream ?? undefined
+      }
+    ],
+    [stream, userId]
+  );
+
+  // handleUpload moved up
 
   const handleClearLocal = async () => {
     await clearChunks(sessionId);

@@ -30,8 +30,14 @@ export async function saveChunk(sessionId: string, chunk: Omit<StoredChunk, "ses
   const db = await getDb();
   return new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readwrite");
-    tx.onerror = () => reject(tx.error);
-    tx.oncomplete = () => resolve();
+    tx.onerror = () => {
+      console.error("IndexedDB: Transaction error", tx.error);
+      reject(tx.error);
+    };
+    tx.oncomplete = () => {
+      console.log(`IndexedDB: Chunk saved for session ${sessionId}`);
+      resolve();
+    };
     tx.objectStore(STORE_NAME).put({ sessionId, ...chunk });
   });
 }
@@ -45,6 +51,7 @@ export async function listChunks(sessionId: string): Promise<StoredChunk[]> {
     const request = store.getAll(IDBKeyRange.bound([sessionId, 0], [sessionId, Infinity]));
     request.onsuccess = () => {
       const items = (request.result as StoredChunk[]).sort((a, b) => a.partNumber - b.partNumber);
+      console.log(`IndexedDB: listed ${items.length} chunks for session ${sessionId}`);
       resolve(items);
     };
   });

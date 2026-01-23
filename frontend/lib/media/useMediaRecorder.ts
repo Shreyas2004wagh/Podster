@@ -33,14 +33,32 @@ export function useMediaRecorder({
   }, [stream]);
 
   const startRecording = useCallback(() => {
+    console.log("startRecording called. Stream:", !!stream, "active:", stream?.active, "canRecord:", canRecord);
     if (!stream || !canRecord) {
+      console.warn("Cannot start recording: stream or support missing");
       setLastError("Recording not available in this browser or stream not ready.");
       return;
     }
     setLastError(null);
     setIsRecording(true);
     partNumber.current = 0;
-    const recorder = new MediaRecorder(stream, { mimeType: RECORDING_MIME_TYPE });
+
+    let mimeType = RECORDING_MIME_TYPE;
+    if (!MediaRecorder.isTypeSupported(mimeType)) {
+      console.warn(`MIME type ${mimeType} not supported. Falling back to default.`);
+      mimeType = ""; // Let browser choose default
+    }
+
+    let recorder: MediaRecorder;
+    try {
+      recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    } catch (err) {
+      console.error("Failed to create MediaRecorder:", err);
+      setLastError(`Failed to create recorder: ${(err as Error).message}`);
+      setIsRecording(false);
+      return;
+    }
+
     recorderRef.current = recorder;
 
     recorder.ondataavailable = async (event: BlobEvent) => {
@@ -60,6 +78,7 @@ export function useMediaRecorder({
     };
 
     recorder.onstop = () => {
+      console.log("MediaRecorder stopped. Calling onStop callback...");
       setIsRecording(false);
       setIsProcessing(false);
       onStop?.();
@@ -67,22 +86,32 @@ export function useMediaRecorder({
 
     setStartedAt(Date.now());
     recorder.start(1000); // slice every second; persistence handled in IndexedDB
-    setIsProcessing(true);
+    setIsProcessing(false);
   }, [canRecord, onStop, sessionId, stream, userId]);
 
   const stopRecording = useCallback(() => {
     if (recorderRef.current && recorderRef.current.state !== "inactive") {
+      console.log("Stopping recorder...");
+      recorderRef.current.requestData(); // Flush final data
       recorderRef.current.stop();
     }
   }, []);
 
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (!isRecording) return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [isRecording]);
+
   const durationLabel = useMemo(() => {
     if (!startedAt || !isRecording) return "00:00";
-    const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+    const elapsed = Math.floor((now - startedAt) / 1000);
     const minutes = String(Math.floor(elapsed / 60)).padStart(2, "0");
     const seconds = String(elapsed % 60).padStart(2, "0");
     return `${minutes}:${seconds}`;
-  }, [isRecording, startedAt]);
+  }, [isRecording, startedAt, now]);
 
   return {
     startRecording,

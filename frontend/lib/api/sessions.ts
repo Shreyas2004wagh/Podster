@@ -27,7 +27,7 @@ export async function requestUploadUrls(
   partCount: number,
   token?: string
 ) {
-  return apiFetch<{ urls: string[] }>(`/sessions/${sessionId}/upload-urls`, {
+  return apiFetch<{ urls: string[]; uploadId: string }>(`/sessions/${sessionId}/upload-urls`, {
     method: "POST",
     json: { partCount },
     headers: token ? { Authorization: `Bearer ${token}` } : undefined

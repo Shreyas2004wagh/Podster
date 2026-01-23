@@ -2,14 +2,14 @@
 
 export type UploadWorkerMessage =
   | {
-      type: "upload-chunks";
-      uploads: Array<{ id: string; url: string; blob: Blob }>;
-    }
+    type: "upload-chunks";
+    uploads: Array<{ id: string; url: string; blob: Blob }>;
+  }
   | { type: "ping" };
 
 export type UploadWorkerResponse =
   | { type: "progress"; id: string; progress: number }
-  | { type: "completed"; id: string }
+  | { type: "completed"; id: string; etag: string }
   | { type: "error"; id: string; message: string }
   | { type: "pong" };
 
@@ -28,11 +28,17 @@ self.onmessage = async (event: MessageEvent<UploadWorkerMessage>) => {
     const uploadOne = async (job: { id: string; url: string; blob: Blob }) => {
       try {
         // TODO: replace with signed multipart URLs from backend
-        await fetch(job.url, {
+        const response = await fetch(job.url, {
           method: "PUT",
           body: job.blob
         });
-        self.postMessage({ type: "completed", id: job.id } satisfies UploadWorkerResponse);
+
+        if (!response.ok) {
+          throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+        }
+
+        const etag = response.headers.get("ETag")?.replace(/"/g, "") || "";
+        self.postMessage({ type: "completed", id: job.id, etag } satisfies UploadWorkerResponse);
       } catch (err) {
         self.postMessage({
           type: "error",
