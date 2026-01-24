@@ -49,6 +49,7 @@ export class SessionService {
   }
 
   async completeUpload(sessionId: SessionId, uploadId: string, parts: Track["parts"]) {
+    console.log("completeUpload called", { sessionId, uploadId, partsCount: parts?.length, parts });
     const session = this.store.get(sessionId);
     if (!session) {
       throw new Error("Session not found");
@@ -57,11 +58,17 @@ export class SessionService {
     if (!track) {
       throw new Error("Track missing for upload completion");
     }
+    console.log("Completing S3 multipart upload", { 
+      key: track.objectKey, 
+      uploadId, 
+      parts: parts?.sort((a, b) => a.partNumber - b.partNumber) 
+    });
     await this.storage.completeMultipartUpload({
       key: track.objectKey,
       uploadId,
       parts: parts ?? []
     });
+    console.log("S3 upload completed, marking session as uploaded");
     this.store.markUploaded(sessionId, track.id, parts ?? []);
     return this.store.get(sessionId);
   }

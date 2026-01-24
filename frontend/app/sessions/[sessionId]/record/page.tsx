@@ -30,6 +30,9 @@ export default function RecordingRoomPage() {
   const handleUpload = async () => {
     console.log("handleUpload: Starting upload process...");
     setUploadError(null);
+    setCompletedParts([]); // Reset completed parts for new upload
+    setUploadId(null); // Reset upload ID
+    
     // Add a small delay to allow the last chunk to be fully written to IndexedDB
     await new Promise(r => setTimeout(r, 500));
 
@@ -50,8 +53,8 @@ export default function RecordingRoomPage() {
       setUploadId(uId); // Ensure we capture the uploadId!
     } catch (err) {
       console.error("handleUpload: Failed to get upload URLs", err);
-      // Backend stub may not be running yet; fallback to placeholder
-      urls = parts.map((_, idx) => `https://example.com/upload/${sessionId}/${idx + 1}`);
+      setUploadError("Failed to get upload URLs from server. Check backend connection.");
+      return;
     }
 
     const uploads = parts.map((blob, idx) => ({
@@ -89,6 +92,8 @@ export default function RecordingRoomPage() {
     void startMedia();
     uploadWorker.current = new UploadWorkerClient();
     uploadWorker.current.onMessage((message) => {
+      if (message.type === "pong") return; // Skip pong messages
+      
       setUploadItems((prev) =>
         prev.map((item) => {
           if (item.id !== message.id) return item;
@@ -115,23 +120,38 @@ export default function RecordingRoomPage() {
 
   // Watch for all uploads completion
   useEffect(() => {
-    if (uploadItems.length > 0 && completedParts.length === uploadItems.length) {
+    if (uploadItems.length > 0 && completedParts.length === uploadItems.length && uploadId) {
       // All parts uploaded
       const finalize = async () => {
-        console.log("All parts uploaded, finalizing...", completedParts);
+        console.log("All parts uploaded, finalizing...", { 
+          uploadId, 
+          partsCount: completedParts.length,
+          parts: completedParts.sort((a, b) => a.partNumber - b.partNumber)
+        });
         try {
-          // We need the uploadId here. It's not currently stored in state, which is a gap.
-          // However, for the initial MVP, let's look at how we got the uploadId.
-          // We got it in handleUpload, but didn't persist it.
-          // We need to store uploadId in state.
+          const { completeUpload } = await import("@/lib/api/sessions");
+          await completeUpload(
+            sessionId,
+            {
+              uploadId,
+              parts: completedParts.sort((a, b) => a.partNumber - b.partNumber)
+            },
+            hostToken ?? undefined
+          );
+          console.log("Upload completed successfully!");
+          // Clear local chunks after successful upload
+          await clearChunks(sessionId);
+          setUploadItems([]);
+          setCompletedParts([]);
+          setUploadId(null);
         } catch (err) {
           console.error("Failed to complete upload", err);
-          setUploadError("Failed to finalize upload on server.");
+          setUploadError(`Failed to finalize upload: ${(err as Error).message}`);
         }
       };
       void finalize();
     }
-  }, [completedParts.length, uploadItems.length]);
+  }, [completedParts.length, uploadItems.length, uploadId, sessionId, hostToken]);
 
 
   useEffect(() => {

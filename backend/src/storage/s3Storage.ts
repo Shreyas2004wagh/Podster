@@ -62,21 +62,33 @@ export class S3StorageProvider implements StorageProvider {
   }
 
   async completeMultipartUpload(request: CompleteUploadRequest): Promise<void> {
+    console.log("S3 completeMultipartUpload called", { 
+      key: request.key, 
+      uploadId: request.uploadId, 
+      partsCount: request.parts?.length,
+      parts: request.parts 
+    });
+    
+    const sortedParts = request.parts
+      .sort((a, b) => a.partNumber - b.partNumber)
+      .map((p) => ({
+        ETag: p.etag,
+        PartNumber: p.partNumber
+      }));
+    
+    console.log("S3 parts after sorting", sortedParts);
+    
     const command = new CompleteMultipartUploadCommand({
       Bucket: env.STORAGE_BUCKET,
       Key: request.key,
       UploadId: request.uploadId,
       MultipartUpload: {
-        Parts: request.parts
-          .sort((a, b) => a.partNumber - b.partNumber)
-          .map((p) => ({
-            ETag: p.etag,
-            PartNumber: p.partNumber
-          }))
+        Parts: sortedParts
       }
     });
 
-    await this.s3.send(command);
+    const result = await this.s3.send(command);
+    console.log("S3 completeMultipartUpload result", result);
   }
 }
 

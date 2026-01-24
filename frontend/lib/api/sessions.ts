@@ -36,10 +36,10 @@ export async function requestUploadUrls(
 
 export async function completeUpload(
   sessionId: SessionId,
-  payload: { uploadId: string },
+  payload: { uploadId: string; parts: Array<{ etag: string; partNumber: number }> },
   token?: string
 ) {
-  return apiFetch<{ ok: true }>(`/sessions/${sessionId}/complete-upload`, {
+  return apiFetch<Session>(`/sessions/${sessionId}/complete-upload`, {
     method: "POST",
     json: payload,
     headers: token ? { Authorization: `Bearer ${token}` } : undefined
