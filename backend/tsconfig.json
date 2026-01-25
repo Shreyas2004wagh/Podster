@@ -4,7 +4,7 @@
     "outDir": "dist",
     "rootDir": "src",
     "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "moduleResolution": "Bundler",
     "types": ["node"],
     "paths": {
       "@/*": ["./src/*"]
