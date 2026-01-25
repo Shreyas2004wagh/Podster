@@ -1,10 +1,11 @@
+
 import Fastify from "fastify";
 import fastifyCors from "@fastify/cors";
 import fastifySensible from "@fastify/sensible";
 import fastifyFormbody from "@fastify/formbody";
-import { env } from "./config/env";
-import { authPlugin } from "./plugins/auth";
-import sessionsRoutes from "./routes/sessions";
+import { env } from "./config/env.js";
+import { authPlugin } from "./plugins/auth.js";
+import sessionsRoutes from "./routes/sessions.js";
 
 const server = Fastify({
   logger: true

@@ -48,9 +48,10 @@ export function Button({
     className
   );
 
-  if (as === "a" && href) {
+  if (as === "a") {
     return (
-      <Link href={href} className={sharedClasses}>
+      // @ts-ignore - Next.js Link href type issue
+      <Link href={href || "#"} className={sharedClasses}>
         {loading && (
           <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/70 border-t-transparent" />
         )}
