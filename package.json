@@ -11,8 +11,14 @@
     "typecheck": "pnpm --recursive typecheck"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.2"
   },
   "pnpm": {
-    "packageManager": "pnpm@10"
+    "packageManager": "pnpm@10",
+    "workspaces": [
+      "shared",
+      "backend",
+      "frontend"
+    ]
   }
 }

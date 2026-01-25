@@ -9,13 +9,14 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc src/index.ts --outDir dist --target es2022 --module esnext --declaration --declarationMap --sourceMap",
     "dev": "tsc -p tsconfig.build.json --watch",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "format": "prettier -w \"src/**/*.{ts,tsx,js,json,md}\"",
     "typecheck": "tsc -p tsconfig.build.json --noEmit"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.2",
     "@typescript-eslint/eslint-plugin": "^8.18.2",
     "@typescript-eslint/parser": "^8.18.2",
     "eslint": "^8.57.1",
