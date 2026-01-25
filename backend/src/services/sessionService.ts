@@ -1,13 +1,12 @@
-import { SessionStore, type CreateSessionInput } from "../models/session";
-import { S3StorageProvider } from "../storage/s3Storage";
-import type { StorageProvider } from "../storage/storageProvider";
-import { SessionStatus, type SessionId, type Track } from "@podster/shared";
+import { SessionStore, type CreateSessionInput, SessionStatus, type SessionId, type Track, StorageProvider, TrackKind } from "../models/session.js";
+import { S3StorageProvider } from "../storage/s3Storage.js";
+import type { StorageProvider as IStorageProvider } from "../storage/storageProvider.js";
 
 export class SessionService {
   private readonly store = new SessionStore();
-  private readonly storage: StorageProvider;
+  private readonly storage: IStorageProvider;
 
-  constructor(storage: StorageProvider = new S3StorageProvider()) {
+  constructor(storage: IStorageProvider = new S3StorageProvider()) {
     this.storage = storage;
   }
 
@@ -33,7 +32,7 @@ export class SessionService {
         uploadId,
         key,
         bucket: "podster",
-        provider: "s3",
+        provider: StorageProvider.S3,
         expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString()
       };
     }
@@ -41,7 +40,7 @@ export class SessionService {
     const track: Track = this.store.addTrack({
       sessionId,
       userId: session.hostId,
-      kind: "video",
+      kind: TrackKind.Video,
       objectKey: key
     });
 

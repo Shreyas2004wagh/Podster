@@ -1,7 +1,7 @@
 import fp from "fastify-plugin";
 import { z } from "zod";
-import { SessionService } from "../services/sessionService";
-import { SessionRole } from "@podster/shared";
+import { SessionService } from "../services/sessionService.js";
+import { SessionRole } from "../models/session.js";
 
 const createSessionSchema = z.object({
   title: z.string().min(1),
