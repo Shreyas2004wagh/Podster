@@ -9,7 +9,11 @@
     "start": "node dist/index.js",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "format": "prettier -w \"src/**/*.{ts,tsx,js,json,md}\"",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.972.0",
@@ -19,6 +23,7 @@
     "@fastify/jwt": "^10.0.0",
     "@fastify/sensible": "^6.0.0",
     "@podster/shared": "workspace:*",
+    "@prisma/client": "^5.22.0",
     "dotenv": "^16.4.7",
     "fastify": "^5.2.1",
     "fastify-plugin": "^5.0.1",
@@ -35,6 +40,7 @@
     "eslint-plugin-import": "^2.31.0",
     "eslint-plugin-security": "^3.0.1",
     "prettier": "^3.4.2",
+    "prisma": "^5.22.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"
   }
