@@ -14,7 +14,7 @@ export interface CompleteUploadRequest {
   parts: Array<{ etag: string; partNumber: number }>;
 }
 
-export interface StorageProvider {
+export interface IStorageProvider {
   createMultipartUpload(request: MultipartUploadRequest): Promise<MultipartUploadResponse>;
   completeMultipartUpload(request: CompleteUploadRequest): Promise<void>;
 }

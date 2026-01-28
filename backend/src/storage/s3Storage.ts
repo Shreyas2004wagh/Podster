@@ -10,10 +10,10 @@ import type {
   CompleteUploadRequest,
   MultipartUploadRequest,
   MultipartUploadResponse,
-  StorageProvider
+  IStorageProvider
 } from "./storageProvider.js";
 
-export class S3StorageProvider implements StorageProvider {
+export class S3StorageProvider implements IStorageProvider {
   private readonly s3: S3Client;
 
   constructor() {

@@ -1,4 +1,4 @@
-import { SessionStatus, TrackKind, StorageProvider } from "@prisma/client";
+import { SessionStatus, TrackKind, StorageProvider } from "@podster/shared";
 import { S3StorageProvider } from "../storage/s3Storage.js";
 import type { StorageProvider as IStorageProvider } from "../storage/storageProvider.js";
 import { 
