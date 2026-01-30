@@ -13,6 +13,7 @@ import { useMediaRecorder } from "@/lib/media/useMediaRecorder";
 import { listChunks, splitBlob, clearChunks } from "@/lib/storage/indexedDb";
 import { UploadWorkerClient } from "@/lib/upload/workerClient";
 import { requestUploadUrls } from "@/lib/api/sessions";
+import { useWebRTC } from "@/lib/webrtc/useWebRTC";
 
 export default function RecordingRoomPage() {
   const params = useParams<{ sessionId: string }>();
@@ -26,13 +27,19 @@ export default function RecordingRoomPage() {
 
   const { stream, start: startMedia, error: mediaError } = useLocalMedia({ video: true, audio: true });
 
+  const { remoteParticipants } = useWebRTC({
+    sessionId,
+    token: hostToken,
+    stream: stream ?? null
+  });
+
   // Define handleUpload higher up so useMediaRecorder can call it
   const handleUpload = async () => {
     console.log("handleUpload: Starting upload process...");
     setUploadError(null);
     setCompletedParts([]); // Reset completed parts for new upload
     setUploadId(null); // Reset upload ID
-    
+
     // Add a small delay to allow the last chunk to be fully written to IndexedDB
     await new Promise(r => setTimeout(r, 500));
 
@@ -93,7 +100,7 @@ export default function RecordingRoomPage() {
     uploadWorker.current = new UploadWorkerClient();
     uploadWorker.current.onMessage((message) => {
       if (message.type === "pong") return; // Skip pong messages
-      
+
       setUploadItems((prev) =>
         prev.map((item) => {
           if (item.id !== message.id) return item;
@@ -123,8 +130,8 @@ export default function RecordingRoomPage() {
     if (uploadItems.length > 0 && completedParts.length === uploadItems.length && uploadId) {
       // All parts uploaded
       const finalize = async () => {
-        console.log("All parts uploaded, finalizing...", { 
-          uploadId, 
+        console.log("All parts uploaded, finalizing...", {
+          uploadId,
           partsCount: completedParts.length,
           parts: completedParts.sort((a, b) => a.partNumber - b.partNumber)
         });
@@ -174,9 +181,15 @@ export default function RecordingRoomPage() {
         name: "You",
         role: "host",
         stream: stream ?? undefined
-      }
+      },
+      ...remoteParticipants.map((rp) => ({
+        id: rp.id,
+        name: `Guest (${rp.id.slice(0, 4)})`, // improved name later
+        role: "guest" as const,
+        stream: rp.stream
+      }))
     ],
-    [stream, userId]
+    [stream, userId, remoteParticipants]
   );
 
   // handleUpload moved up

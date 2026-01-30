@@ -1,54 +1,92 @@
-type Listener = (payload: unknown) => void;
+import { io, Socket } from "socket.io-client";
+import { env } from "@/lib/env";
+
+type Listener = (payload: any) => void;
 
 interface SignalingOptions {
   sessionId: string;
   token: string;
 }
 
-/**
- * Lightweight placeholder to keep WebRTC signaling concerns isolated from recording.
- * Replace with WebSocket or SFU signaling without touching recording logic.
- */
 export class SignalingClient {
-  private listeners: Map<string, Listener[]> = new Map();
-  private connected = false;
+  private socket: Socket;
   private readonly sessionId: string;
   private readonly token: string;
 
   constructor(options: SignalingOptions) {
     this.sessionId = options.sessionId;
     this.token = options.token;
+
+    // Connect to backend URL (remove /api/v1 if needed, or assume backend root handles socket.io)
+    // Adjust based on your backend URL structure. 
+    // If NEXT_PUBLIC_API_URL is "http://localhost:4000", socket.io usually looks for /socket.io
+    const url = env.NEXT_PUBLIC_API_URL.replace(/\/$/, "");
+
+    this.socket = io(url, {
+      autoConnect: false,
+      reconnection: true,
+      query: {
+        sessionId: this.sessionId,
+        token: this.token
+      }
+    });
+
+    this.setupListeners();
+  }
+
+  private setupListeners() {
+    this.socket.on("connect", () => {
+      console.log("Signaling: Connected to socket");
+      // Explicitly join room after connection
+      this.socket.emit("join-room", { sessionId: this.sessionId, token: this.token });
+    });
+
+    this.socket.on("connect_error", (err) => {
+      console.error("Signaling: Connection error", err);
+    });
+
+    this.socket.on("disconnect", (reason) => {
+      console.log("Signaling: Disconnected", reason);
+    });
   }
 
   async connect() {
-    // TODO: swap with WebSocket signaling implementation
-    this.connected = true;
-    this.emit("connected", { sessionId: this.sessionId, token: this.token });
+    if (this.socket.connected) return;
+    this.socket.connect();
   }
 
   disconnect() {
-    this.connected = false;
-    this.emit("disconnected", undefined);
+    if (this.socket.connected) {
+      this.socket.disconnect();
+    }
   }
 
   on(event: string, listener: Listener) {
-    const existing = this.listeners.get(event) ?? [];
-    this.listeners.set(event, [...existing, listener]);
+    this.socket.on(event, listener);
   }
 
   off(event: string, listener: Listener) {
-    const existing = this.listeners.get(event) ?? [];
-    this.listeners.set(
-      event,
-      existing.filter((fn) => fn !== listener)
-    );
+    this.socket.off(event, listener);
   }
 
-  emit(event: string, payload: unknown) {
-    this.listeners.get(event)?.forEach((fn) => fn(payload));
+  emit(event: string, payload: any) {
+    this.socket.emit(event, payload);
   }
 
-  isConnected() {
-    return this.connected;
+  // Helper methods for WebRTC specific signals
+  sendOffer(to: string, offer: RTCSessionDescriptionInit) {
+    this.socket.emit("offer", { to, offer });
+  }
+
+  sendAnswer(to: string, answer: RTCSessionDescriptionInit) {
+    this.socket.emit("answer", { to, answer });
+  }
+
+  sendIceCandidate(to: string, candidate: RTCIceCandidate) {
+    this.socket.emit("ice-candidate", { to, candidate });
+  }
+
+  getId() {
+    return this.socket.id;
   }
 }

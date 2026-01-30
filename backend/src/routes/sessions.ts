@@ -157,6 +157,12 @@ import fp from "fastify-plugin";
 import { z } from "zod";
 import { SessionService } from "../services/sessionService.js";
 import { SessionRole } from "../models/session.js";
+import { createPrismaClient } from "../config/database.js";
+import {
+  PrismaSessionRepository,
+  PrismaTrackRepository,
+  PrismaUploadTargetRepository
+} from "../repositories/index.js";
 
 const createSessionSchema = z.object({
   title: z.string().min(1),
@@ -180,7 +186,12 @@ const completeUploadSchema = z.object({
 });
 
 export default fp(async (fastify) => {
-  const service = new SessionService();
+  const prisma = createPrismaClient();
+  const sessionRepo = new PrismaSessionRepository(prisma);
+  const trackRepo = new PrismaTrackRepository(prisma);
+  const uploadRepo = new PrismaUploadTargetRepository(prisma);
+
+  const service = new SessionService(sessionRepo, trackRepo, uploadRepo);
 
   fastify.post("/sessions", async (request, reply) => {
     try {

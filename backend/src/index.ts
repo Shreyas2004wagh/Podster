@@ -5,6 +5,7 @@ import fastifySensible from "@fastify/sensible";
 import fastifyFormbody from "@fastify/formbody";
 import { env } from "./config/env.js";
 import { authPlugin } from "./plugins/auth.js";
+import socketPlugin from "./plugins/socket.js";
 import sessionsRoutes from "./routes/sessions.js";
 
 const server = Fastify({
@@ -15,6 +16,7 @@ server.register(fastifyCors, { origin: "*" });
 server.register(fastifySensible);
 server.register(fastifyFormbody);
 server.register(authPlugin);
+server.register(socketPlugin);
 server.register(sessionsRoutes);
 
 server.get("/health", async () => ({ status: "ok" }));
