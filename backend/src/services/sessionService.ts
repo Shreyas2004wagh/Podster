@@ -1,117 +1,282 @@
-import { SessionStatus, TrackKind, StorageProvider } from "@podster/shared";
-import { S3StorageProvider } from "../storage/s3Storage.js";
-import type { StorageProvider as IStorageProvider } from "../storage/storageProvider.js";
+import { SessionStatus, TrackKind, StorageProvider } from "@prisma/client";
+import type { IStorageProvider } from "../storage/storageProvider.js";
 import { 
-  ISessionRepository, 
-  ITrackRepository, 
-  IUploadTargetRepository,
+  type ISessionRepository, 
+  type ITrackRepository, 
+  type IUploadTargetRepository,
   CreateSessionInput,
   CreateTrackInput,
   CreateUploadTargetInput,
-  SessionId,
-  TrackId
+  SessionId
 } from "../repositories/index.js";
+import { ISessionService } from "./ISessionService.js";
+import { ILogger, createChildLogger } from "../config/logger.js";
+import { IMetrics, PrometheusMetrics } from "../config/metrics.js";
 
-export class SessionService {
-  private readonly sessionRepository: ISessionRepository;
-  private readonly trackRepository: ITrackRepository;
-  private readonly uploadTargetRepository: IUploadTargetRepository;
-  private readonly storage: IStorageProvider;
+export class SessionService implements ISessionService {
+  private readonly logger: ILogger;
+  private readonly metrics: IMetrics;
 
   constructor(
-    sessionRepository: ISessionRepository,
-    trackRepository: ITrackRepository,
-    uploadTargetRepository: IUploadTargetRepository,
-    storage: IStorageProvider = new S3StorageProvider()
+    private readonly sessionRepository: ISessionRepository,
+    private readonly trackRepository: ITrackRepository,
+    private readonly uploadTargetRepository: IUploadTargetRepository,
+    private readonly storage: IStorageProvider
   ) {
-    this.sessionRepository = sessionRepository;
-    this.trackRepository = trackRepository;
-    this.uploadTargetRepository = uploadTargetRepository;
-    this.storage = storage;
+    this.logger = createChildLogger({ service: "SessionService" });
+    this.metrics = new PrometheusMetrics();
   }
 
   async createSession(input: CreateSessionInput) {
-    return await this.sessionRepository.create(input);
+    const startTime = Date.now();
+    
+    try {
+      this.logger.info({
+        event: "session_creation_start",
+        input: { title: input.title, hostId: input.hostId },
+      }, "Creating new session");
+
+      const session = await this.sessionRepository.create(input);
+      
+      const duration = Date.now() - startTime;
+      this.logger.info({
+        event: "session_created",
+        sessionId: session.id,
+        title: session.title,
+        hostId: session.hostId,
+        duration,
+      }, `Session created successfully in ${duration}ms`);
+
+      // Record metrics
+      this.metrics.recordSessionCreated("success");
+
+      return session;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error({
+        event: "session_creation_failed",
+        input: { title: input.title, hostId: input.hostId },
+        duration,
+        error: {
+          name: (error as Error).name,
+          message: (error as Error).message,
+          stack: (error as Error).stack,
+        },
+      }, `Session creation failed after ${duration}ms`);
+      
+      // Record metrics
+      this.metrics.recordSessionCreated("failure");
+      
+      throw error;
+    }
   }
 
   async getSession(sessionId: SessionId) {
-    return await this.sessionRepository.findByIdWithTracks(sessionId);
+    const startTime = Date.now();
+    
+    try {
+      this.logger.debug({
+        event: "session_retrieval_start",
+        sessionId,
+      }, "Retrieving session");
+
+      const session = await this.sessionRepository.findByIdWithTracks(sessionId);
+      
+      const duration = Date.now() - startTime;
+      if (session) {
+        this.logger.debug({
+          event: "session_retrieved",
+          sessionId,
+          trackCount: session.tracks.length,
+          duration,
+        }, `Session retrieved in ${duration}ms`);
+      } else {
+        this.logger.warn({
+          event: "session_not_found",
+          sessionId,
+          duration,
+        }, `Session not found after ${duration}ms`);
+      }
+
+      return session;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error({
+        event: "session_retrieval_failed",
+        sessionId,
+        duration,
+        error: {
+          name: (error as Error).name,
+          message: (error as Error).message,
+          stack: (error as Error).stack,
+        },
+      }, `Session retrieval failed after ${duration}ms`);
+      throw error;
+    }
   }
 
   async requestUploadUrls(sessionId: SessionId, partCount: number) {
-    const session = await this.sessionRepository.findById(sessionId);
-    if (!session) {
-      throw new Error("Session not found");
-    }
+    const startTime = Date.now();
     
-    const key = `sessions/${sessionId}/${Date.now()}.webm`;
-    const { uploadId, urls } = await this.storage.createMultipartUpload({ key, partCount });
-
-    // Update session status if it's still in draft
-    if (session.status === SessionStatus.DRAFT) {
-      await this.sessionRepository.update(sessionId, { 
-        status: SessionStatus.UPLOADING 
-      });
-      
-      // Create upload target
-      const uploadTargetInput: CreateUploadTargetInput = {
+    try {
+      this.logger.info({
+        event: "upload_request_start",
         sessionId,
-        uploadId,
-        key,
-        bucket: "podster",
-        provider: StorageProvider.S3,
-        expiresAt: new Date(Date.now() + 15 * 60 * 1000)
+        partCount,
+      }, "Requesting upload URLs");
+
+      const session = await this.sessionRepository.findById(sessionId);
+      if (!session) {
+        this.logger.warn({
+          event: "upload_request_session_not_found",
+          sessionId,
+        }, "Session not found for upload request");
+        throw new Error("Session not found");
+      }
+      
+      const key = `sessions/${sessionId}/${Date.now()}.webm`;
+      const { uploadId, urls } = await this.storage.createMultipartUpload({ key, partCount });
+
+      // Update session status if it's still in draft
+      if (session.status === SessionStatus.DRAFT) {
+        await this.sessionRepository.update(sessionId, { 
+          status: SessionStatus.UPLOADING 
+        });
+        
+        // Create upload target
+        const uploadTargetInput: CreateUploadTargetInput = {
+          sessionId,
+          uploadId,
+          key,
+          bucket: "podster",
+          provider: StorageProvider.S3,
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000)
+        };
+        await this.uploadTargetRepository.create(uploadTargetInput);
+      }
+
+      // Create track
+      const trackInput: CreateTrackInput = {
+        sessionId,
+        userId: session.hostId,
+        kind: TrackKind.VIDEO,
+        objectKey: key
       };
-      await this.uploadTargetRepository.create(uploadTargetInput);
+      const track = await this.trackRepository.create(trackInput);
+
+      const duration = Date.now() - startTime;
+      this.logger.info({
+        event: "upload_urls_generated",
+        sessionId,
+        trackId: track.id,
+        uploadId,
+        partCount,
+        duration,
+      }, `Upload URLs generated in ${duration}ms`);
+
+      return { uploadId, urls, trackId: track.id, objectKey: key };
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error({
+        event: "upload_request_failed",
+        sessionId,
+        partCount,
+        duration,
+        error: {
+          name: (error as Error).name,
+          message: (error as Error).message,
+          stack: (error as Error).stack,
+        },
+      }, `Upload request failed after ${duration}ms`);
+      throw error;
     }
-
-    // Create track
-    const trackInput: CreateTrackInput = {
-      sessionId,
-      userId: session.hostId,
-      kind: TrackKind.VIDEO,
-      objectKey: key
-    };
-    const track = await this.trackRepository.create(trackInput);
-
-    return { uploadId, urls, trackId: track.id, objectKey: key };
   }
 
   async completeUpload(sessionId: SessionId, uploadId: string, parts: any[]) {
-    console.log("completeUpload called", { sessionId, uploadId, partsCount: parts?.length, parts });
+    const startTime = Date.now();
     
-    const session = await this.sessionRepository.findByIdWithTracks(sessionId);
-    if (!session) {
-      throw new Error("Session not found");
+    try {
+      this.logger.info({
+        event: "upload_completion_start",
+        sessionId,
+        uploadId,
+        partsCount: parts?.length,
+      }, "Completing upload");
+      
+      const session = await this.sessionRepository.findByIdWithTracks(sessionId);
+      if (!session) {
+        this.logger.warn({
+          event: "upload_completion_session_not_found",
+          sessionId,
+          uploadId,
+        }, "Session not found for upload completion");
+        throw new Error("Session not found");
+      }
+      
+      const track = session.tracks[0];
+      if (!track) {
+        this.logger.warn({
+          event: "upload_completion_track_missing",
+          sessionId,
+          uploadId,
+        }, "Track missing for upload completion");
+        throw new Error("Track missing for upload completion");
+      }
+      
+      this.logger.debug({
+        event: "s3_multipart_completion_start",
+        key: track.objectKey,
+        uploadId,
+        partsCount: parts?.length,
+      }, "Completing S3 multipart upload");
+      
+      await this.storage.completeMultipartUpload({
+        key: track.objectKey,
+        uploadId,
+        parts: parts ?? []
+      });
+      
+      this.logger.debug({
+        event: "s3_multipart_completed",
+        key: track.objectKey,
+        uploadId,
+      }, "S3 multipart upload completed");
+      
+      // Mark track as completed
+      await this.trackRepository.markCompleted(track.id, parts ?? []);
+      
+      // Update session status to complete
+      await this.sessionRepository.update(sessionId, { 
+        status: SessionStatus.COMPLETE 
+      });
+      
+      const finalSession = await this.sessionRepository.findByIdWithTracks(sessionId);
+      
+      const duration = Date.now() - startTime;
+      this.logger.info({
+        event: "upload_completed",
+        sessionId,
+        trackId: track.id,
+        uploadId,
+        duration,
+      }, `Upload completed successfully in ${duration}ms`);
+      
+      return finalSession;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error({
+        event: "upload_completion_failed",
+        sessionId,
+        uploadId,
+        partsCount: parts?.length,
+        duration,
+        error: {
+          name: (error as Error).name,
+          message: (error as Error).message,
+          stack: (error as Error).stack,
+        },
+      }, `Upload completion failed after ${duration}ms`);
+      throw error;
     }
-    
-    const track = session.tracks[0];
-    if (!track) {
-      throw new Error("Track missing for upload completion");
-    }
-    
-    console.log("Completing S3 multipart upload", { 
-      key: track.objectKey, 
-      uploadId, 
-      parts: parts?.sort((a, b) => a.partNumber - b.partNumber) 
-    });
-    
-    await this.storage.completeMultipartUpload({
-      key: track.objectKey,
-      uploadId,
-      parts: parts ?? []
-    });
-    
-    console.log("S3 upload completed, marking track as completed");
-    
-    // Mark track as completed
-    await this.trackRepository.markCompleted(track.id, parts ?? []);
-    
-    // Update session status to complete
-    await this.sessionRepository.update(sessionId, { 
-      status: SessionStatus.COMPLETE 
-    });
-    
-    return await this.sessionRepository.findByIdWithTracks(sessionId);
   }
 }
