@@ -21,38 +21,7 @@ export function createPrismaClient(): PrismaClient {
         url: databaseUrl.toString(),
       },
     },
-    log: [
-      {
-        emit: "event",
-        level: "query",
-      },
-      {
-        emit: "event",
-        level: "error",
-      },
-      {
-        emit: "event",
-        level: "info",
-      },
-      {
-        emit: "event",
-        level: "warn",
-      },
-    ],
-  });
-
-  // Log database queries in development
-  if (process.env.NODE_ENV === "development") {
-    prisma.$on("query", (e) => {
-      console.log("Query: " + e.query);
-      console.log("Params: " + e.params);
-      console.log("Duration: " + e.duration + "ms");
-    });
-  }
-
-  // Log database errors
-  prisma.$on("error", (e) => {
-    console.error("Database error:", e);
+    log: process.env.NODE_ENV === "development" ? ["query", "info", "warn", "error"] : ["error"],
   });
 
   return prisma;

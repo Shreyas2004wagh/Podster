@@ -6,6 +6,9 @@ const envSchema = z.object({
   HOST_JWT_SECRET: z.string().min(8).default("podster-host-secret"),
   GUEST_JWT_SECRET: z.string().min(8).default("podster-guest-secret"),
   
+  // Logging configuration
+  LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info"),
+  
   // Database configuration
   DATABASE_URL: z.string().default("postgresql://podster:podster@localhost:5432/podster"),
   DATABASE_POOL_SIZE: z.coerce.number().default(20),
