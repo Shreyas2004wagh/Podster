@@ -13,3 +13,8 @@ tmp
 .idea
 .vscode
 nul
+"nul" 
+"frontend/test-results/" 
+"*.log" 
+".DS_Store" 
+nul 

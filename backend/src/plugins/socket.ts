@@ -1,4 +1,5 @@
 import fp from "fastify-plugin";
+// @ts-ignore - fastify-socket.io has type issues
 import fastifySocketIO from "fastify-socket.io";
 import { Server, Socket } from "socket.io";
 
@@ -14,7 +15,8 @@ interface SignalingPayload {
 }
 
 export default fp(async (fastify) => {
-    fastify.register(fastifySocketIO, {
+    // @ts-ignore - fastify-socket.io has type issues
+    await fastify.register(fastifySocketIO, {
         cors: {
             origin: "*", // Adjust in production
             methods: ["GET", "POST"]
@@ -29,7 +31,7 @@ export default fp(async (fastify) => {
 
             // Join a session room
             socket.on("join-room", async (data: { sessionId: string; token: string }) => {
-                const { sessionId, token } = data;
+                const { sessionId } = data;
 
                 try {
                     // Verify token
