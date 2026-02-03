@@ -14,7 +14,13 @@ export interface CompleteUploadRequest {
   parts: Array<{ etag: string; partNumber: number }>;
 }
 
+export interface DownloadUrlRequest {
+  key: string;
+  expiresInSeconds?: number;
+}
+
 export interface IStorageProvider {
   createMultipartUpload(request: MultipartUploadRequest): Promise<MultipartUploadResponse>;
   completeMultipartUpload(request: CompleteUploadRequest): Promise<void>;
+  getSignedDownloadUrl(request: DownloadUrlRequest): Promise<string>;
 }

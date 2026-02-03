@@ -2,12 +2,14 @@ import {
   S3Client,
   CreateMultipartUploadCommand,
   CompleteMultipartUploadCommand,
-  UploadPartCommand
+  UploadPartCommand,
+  GetObjectCommand
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env } from "../config/env.js";
 import type {
   CompleteUploadRequest,
+  DownloadUrlRequest,
   MultipartUploadRequest,
   MultipartUploadResponse,
   IStorageProvider
@@ -90,5 +92,12 @@ export class S3StorageProvider implements IStorageProvider {
     const result = await this.s3.send(command);
     console.log("S3 completeMultipartUpload result", result);
   }
-}
 
+  async getSignedDownloadUrl(request: DownloadUrlRequest): Promise<string> {
+    const command = new GetObjectCommand({
+      Bucket: env.STORAGE_BUCKET,
+      Key: request.key
+    });
+    return getSignedUrl(this.s3, command, { expiresIn: request.expiresInSeconds ?? 900 });
+  }
+}
