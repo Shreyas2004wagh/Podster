@@ -20,8 +20,6 @@ export default function JoinSessionPage() {
     setError(null);
     try {
       const response = await joinSession(params.sessionId, { guestName: name });
-      // TODO: persist guest token securely (httpOnly cookie via backend)
-      localStorage.setItem("podster_guest_token", response.token);
       router.push(`/sessions/${params.sessionId}/record`);
     } catch (err) {
       setError((err as Error).message);

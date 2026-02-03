@@ -6,12 +6,13 @@ import type { Session } from "@podster/shared";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { getSession } from "@/lib/api/sessions";
+import { getDownloadUrl, getSession } from "@/lib/api/sessions";
 
 export default function SessionDashboardPage() {
   const params = useParams<{ sessionId: string }>();
   const [session, setSession] = useState<Session | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   useEffect(() => {
     getSession(params.sessionId)
@@ -54,13 +55,27 @@ export default function SessionDashboardPage() {
                 <Badge tone={track.completedAt ? "success" : "default"}>
                   {track.completedAt ? "Uploaded" : "Pending"}
                 </Badge>
-                <Button variant="secondary" size="sm">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={!track.completedAt}
+                  onClick={async () => {
+                    try {
+                      setDownloadError(null);
+                      const result = await getDownloadUrl(params.sessionId, track.id);
+                      window.open(result.url, "_blank", "noopener,noreferrer");
+                    } catch (err) {
+                      setDownloadError((err as Error).message);
+                    }
+                  }}
+                >
                   Download
                 </Button>
               </div>
             </div>
           ))}
         </div>
+        {downloadError && <p className="mt-3 text-sm text-red-200">{downloadError}</p>}
       </Card>
     </div>
   );

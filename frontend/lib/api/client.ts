@@ -8,6 +8,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   const { json, headers, ...rest } = options;
   const response = await fetch(`${env.NEXT_PUBLIC_API_URL}${path}`, {
     ...rest,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...(headers ?? {})

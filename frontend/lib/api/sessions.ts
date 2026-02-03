@@ -24,24 +24,35 @@ export async function getSession(sessionId: SessionId) {
 
 export async function requestUploadUrls(
   sessionId: SessionId,
-  partCount: number,
-  token?: string
+  partCount: number
 ) {
   return apiFetch<{ urls: string[]; uploadId: string }>(`/sessions/${sessionId}/upload-urls`, {
     method: "POST",
-    json: { partCount },
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined
+    json: { partCount }
   });
 }
 
 export async function completeUpload(
   sessionId: SessionId,
-  payload: { uploadId: string; parts: Array<{ etag: string; partNumber: number }> },
-  token?: string
+  payload: { uploadId: string; parts: Array<{ etag: string; partNumber: number }> }
 ) {
   return apiFetch<Session>(`/sessions/${sessionId}/complete-upload`, {
     method: "POST",
-    json: payload,
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined
+    json: payload
+  });
+}
+
+export async function startSession(sessionId: SessionId) {
+  return apiFetch<Session>(`/sessions/${sessionId}/start`, {
+    method: "POST"
+  });
+}
+
+export async function getDownloadUrl(
+  sessionId: SessionId,
+  trackId: string
+) {
+  return apiFetch<{ url: string }>(`/sessions/${sessionId}/tracks/${trackId}/download`, {
+    method: "GET"
   });
 }

@@ -21,8 +21,6 @@ export default function CreateSessionPage() {
     setError(null);
     try {
       const result = await createSession({ title });
-      // Persist host token locally for authenticated upload URL requests.
-      localStorage.setItem("podster_host_token", result.hostToken);
       // We keep notes client-side for now; backend stub does not store them.
       router.push(`/sessions/${result.session.id}/record`);
     } catch (err) {

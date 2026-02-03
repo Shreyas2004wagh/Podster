@@ -11,16 +11,16 @@ import { UploadProgress, type UploadItem } from "@/components/upload-progress";
 import { useLocalMedia } from "@/lib/media/useLocalMedia";
 import { useMediaRecorder } from "@/lib/media/useMediaRecorder";
 import { listChunks, splitBlob, clearChunks } from "@/lib/storage/indexedDb";
-import { UploadWorkerClient } from "@/lib/upload/workerClient";
-import { requestUploadUrls } from "@/lib/api/sessions";
+import { UploadWorkerClient, type UploadJob } from "@/lib/upload/workerClient";
+import { requestUploadUrls, startSession } from "@/lib/api/sessions";
 import { useWebRTC } from "@/lib/webrtc/useWebRTC";
 
 export default function RecordingRoomPage() {
   const params = useParams<{ sessionId: string }>();
   const sessionId = params.sessionId;
   const userId = useMemo(() => `user-${sessionId}-host`, [sessionId]);
-  const [hostToken, setHostToken] = useState<string | null>(null);
   const uploadWorker = useRef<UploadWorkerClient | null>(null);
+  const uploadJobsRef = useRef<UploadJob[]>([]);
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadId, setUploadId] = useState<string | null>(null);
@@ -29,7 +29,6 @@ export default function RecordingRoomPage() {
 
   const { remoteParticipants } = useWebRTC({
     sessionId,
-    token: hostToken,
     stream: stream ?? null
   });
 
@@ -55,12 +54,12 @@ export default function RecordingRoomPage() {
     const parts = splitBlob(combined);
     let urls: string[] = [];
     try {
-      const { urls: signed, uploadId: uId } = await requestUploadUrls(sessionId, parts.length, hostToken ?? undefined);
+      const { urls: signed, uploadId: uId } = await requestUploadUrls(sessionId, parts.length);
       urls = signed;
       setUploadId(uId); // Ensure we capture the uploadId!
     } catch (err) {
       console.error("handleUpload: Failed to get upload URLs", err);
-      setUploadError("Failed to get upload URLs from server. Check backend connection.");
+      setUploadError("Failed to get upload URLs from server. Check backend connection and auth.");
       return;
     }
 
@@ -69,6 +68,7 @@ export default function RecordingRoomPage() {
       url: urls[idx] ?? urls[0],
       blob
     }));
+    uploadJobsRef.current = uploads;
 
     setUploadItems(
       uploads.map((upload) => ({
@@ -110,7 +110,8 @@ export default function RecordingRoomPage() {
             setCompletedParts((prevParts) => {
               // extract part number from id "part-1" -> 1
               const partNumber = parseInt(message.id.replace("part-", ""), 10);
-              return [...prevParts, { partNumber, etag: message.etag }];
+              const without = prevParts.filter((p) => p.partNumber !== partNumber);
+              return [...without, { partNumber, etag: message.etag }];
             });
             return { ...item, progress: 100, status: "completed" };
           }
@@ -119,6 +120,9 @@ export default function RecordingRoomPage() {
           return item;
         })
       );
+      if (message.type === "error") {
+        setUploadError("One or more parts failed to upload. Click Retry failed to try again.");
+      }
     });
     return () => {
       uploadWorker.current?.dispose();
@@ -142,8 +146,7 @@ export default function RecordingRoomPage() {
             {
               uploadId,
               parts: completedParts.sort((a, b) => a.partNumber - b.partNumber)
-            },
-            hostToken ?? undefined
+            }
           );
           console.log("Upload completed successfully!");
           // Clear local chunks after successful upload
@@ -158,21 +161,18 @@ export default function RecordingRoomPage() {
       };
       void finalize();
     }
-  }, [completedParts.length, uploadItems.length, uploadId, sessionId, hostToken]);
+  }, [completedParts.length, uploadItems.length, uploadId, sessionId]);
 
 
-  useEffect(() => {
-    // Poll for token every second if not present, as it might be set asynchronously by another component
-    const checkToken = () => {
-      const token = localStorage.getItem("podster_host_token");
-      if (token && token !== hostToken) {
-        setHostToken(token);
-      }
-    };
-    checkToken();
-    const interval = setInterval(checkToken, 1000);
-    return () => clearInterval(interval);
-  }, [hostToken]);
+  const handleStart = async () => {
+    try {
+      await startSession(sessionId);
+    } catch (err) {
+      console.error("Failed to mark session live", err);
+      setUploadError("Failed to mark session live. Check backend connection and auth.");
+    }
+    startRecording();
+  };
 
   const participants: Participant[] = useMemo(
     () => [
@@ -199,6 +199,19 @@ export default function RecordingRoomPage() {
     setUploadItems([]);
   };
 
+  const handleRetryFailed = () => {
+    const failedIds = new Set(uploadItems.filter((item) => item.status === "error").map((item) => item.id));
+    if (failedIds.size === 0) return;
+    setUploadError(null);
+    setUploadItems((prev) =>
+      prev.map((item) =>
+        failedIds.has(item.id) ? { ...item, progress: 0, status: "pending", errorMessage: undefined } : item
+      )
+    );
+    const retryJobs = uploadJobsRef.current.filter((job) => failedIds.has(job.id));
+    uploadWorker.current?.upload(retryJobs);
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -220,7 +233,7 @@ export default function RecordingRoomPage() {
         isRecording={isRecording}
         isProcessing={isProcessing}
         durationLabel={durationLabel}
-        onStart={startRecording}
+        onStart={handleStart}
         onStop={stopRecording}
         onSave={handleUpload}
       />
@@ -233,9 +246,14 @@ export default function RecordingRoomPage() {
         <Card>
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-white">Upload queue</h3>
-            <Button variant="ghost" size="sm" onClick={handleClearLocal}>
-              Clear local chunks
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={handleRetryFailed}>
+                Retry failed
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handleClearLocal}>
+                Clear local chunks
+              </Button>
+            </div>
           </div>
           <p className="text-sm text-slate-300">
             Chunks persist in IndexedDB until upload completes. Worker uploads in parallel.
