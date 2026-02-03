@@ -20,7 +20,11 @@ const envSchema = z.object({
   STORAGE_ACCESS_KEY: z.string().default(""),
   STORAGE_SECRET_KEY: z.string().default(""),
   STORAGE_BUCKET: z.string().default("podster"),
-  STORAGE_PROVIDER: z.enum(["s3", "r2", "local"]).default("local")
+  STORAGE_PROVIDER: z.enum(["s3", "r2", "local"]).default("s3"),
+
+  // CORS / cookies
+  FRONTEND_ORIGIN: z.string().default("http://localhost:3000"),
+  COOKIE_SECRET: z.string().optional()
 });
 
 export const env = envSchema.parse(process.env);

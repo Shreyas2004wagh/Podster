@@ -2,6 +2,7 @@
 import "reflect-metadata"; // Must be first import for tsyringe
 import Fastify from "fastify";
 import fastifyCors from "@fastify/cors";
+import fastifyCookie from "@fastify/cookie";
 import fastifySensible from "@fastify/sensible";
 import fastifyFormbody from "@fastify/formbody";
 import { env } from "./config/env.js";
@@ -24,7 +25,11 @@ const server = Fastify({
   disableRequestLogging: true, // We handle this in our middleware
 });
 
-server.register(fastifyCors, { origin: "*" });
+server.register(fastifyCors, { origin: env.FRONTEND_ORIGIN, credentials: true });
+server.register(fastifyCookie, {
+  secret: env.COOKIE_SECRET,
+  hook: "onRequest"
+});
 server.register(fastifySensible);
 server.register(fastifyFormbody);
 
