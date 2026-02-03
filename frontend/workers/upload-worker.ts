@@ -14,6 +14,7 @@ export type UploadWorkerResponse =
   | { type: "pong" };
 
 const concurrentUploads = 3;
+const maxRetries = 2;
 
 self.onmessage = async (event: MessageEvent<UploadWorkerMessage>) => {
   if (event.data.type === "ping") {
@@ -27,18 +28,30 @@ self.onmessage = async (event: MessageEvent<UploadWorkerMessage>) => {
 
     const uploadOne = async (job: { id: string; url: string; blob: Blob }) => {
       try {
-        // TODO: replace with signed multipart URLs from backend
-        const response = await fetch(job.url, {
-          method: "PUT",
-          body: job.blob
-        });
+        let attempt = 0;
+        let lastError: Error | null = null;
+        while (attempt <= maxRetries) {
+          try {
+            const response = await fetch(job.url, {
+              method: "PUT",
+              body: job.blob
+            });
 
-        if (!response.ok) {
-          throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+            if (!response.ok) {
+              throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+            }
+
+            const etag = response.headers.get("ETag")?.replace(/"/g, "") || "";
+            self.postMessage({ type: "completed", id: job.id, etag } satisfies UploadWorkerResponse);
+            return;
+          } catch (err) {
+            lastError = err as Error;
+            const delay = 500 * Math.pow(2, attempt);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            attempt += 1;
+          }
         }
-
-        const etag = response.headers.get("ETag")?.replace(/"/g, "") || "";
-        self.postMessage({ type: "completed", id: job.id, etag } satisfies UploadWorkerResponse);
+        throw lastError ?? new Error("Upload failed");
       } catch (err) {
         self.postMessage({
           type: "error",
