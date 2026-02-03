@@ -2,6 +2,8 @@ import fp from "fastify-plugin";
 // @ts-ignore - fastify-socket.io has type issues
 import fastifySocketIO from "fastify-socket.io";
 import { Server, Socket } from "socket.io";
+import { env } from "../config/env.js";
+import { SessionRole } from "../models/session.js";
 
 declare module "fastify" {
     interface FastifyInstance {
@@ -18,26 +20,64 @@ export default fp(async (fastify) => {
     // @ts-ignore - fastify-socket.io has type issues
     await fastify.register(fastifySocketIO, {
         cors: {
-            origin: "*", // Adjust in production
-            methods: ["GET", "POST"]
+            origin: env.FRONTEND_ORIGIN,
+            methods: ["GET", "POST"],
+            credentials: true
         }
     });
 
     fastify.ready((err) => {
         if (err) throw err;
 
+        fastify.io.use(async (socket, next) => {
+            try {
+                const headerCookie = socket.handshake.headers.cookie;
+                const parsedCookies = headerCookie ? fastify.parseCookie(headerCookie) : {};
+                const queryToken = socket.handshake.query?.token;
+                const token =
+                    socket.handshake.auth?.token ||
+                    (Array.isArray(queryToken) ? queryToken[0] : queryToken) ||
+                    parsedCookies?.podster_token;
+                if (!token || typeof token !== "string") {
+                    return next(new Error("Missing auth token"));
+                }
+                try {
+                    // @ts-ignore
+                    const decoded = await fastify.jwt.verify(token, { secret: env.HOST_JWT_SECRET });
+                    if (decoded.role === SessionRole.Host) {
+                        socket.data.user = { sub: decoded.sub, role: SessionRole.Host };
+                        return next();
+                    }
+                } catch {
+                    // fallthrough to guest verification
+                }
+                // @ts-ignore
+                const decodedGuest = await fastify.jwt.verify(token, { secret: env.GUEST_JWT_SECRET });
+                if (decodedGuest.role !== SessionRole.Guest) {
+                    return next(new Error("Invalid token role"));
+                }
+                socket.data.user = { sub: decodedGuest.sub, role: SessionRole.Guest };
+                return next();
+            } catch (err) {
+                return next(err as Error);
+            }
+        });
+
         fastify.io.on("connection", (socket: Socket) => {
             fastify.log.info({ socketId: socket.id }, "Socket connected");
 
             // Join a session room
-            socket.on("join-room", async (data: { sessionId: string; token: string }) => {
+            socket.on("join-room", async (data: { sessionId: string }) => {
                 const { sessionId } = data;
 
                 try {
-                    // Verify token
-                    // For now, simpler verification: just check if it claims to be host or guest
-                    // Real impl: fastify.jwt.verify(token)
-                    // But we need access to verify via plugin scope or manually using jwt library
+                    const user = socket.data.user as { sub: string; role: SessionRole } | undefined;
+                    if (!user) {
+                        throw new Error("Unauthorized");
+                    }
+                    if (user.role === SessionRole.Guest && user.sub !== sessionId) {
+                        throw new Error("Guest token does not match session");
+                    }
 
                     await socket.join(sessionId);
 
