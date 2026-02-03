@@ -1,6 +1,7 @@
 import "reflect-metadata";
 import { container } from "tsyringe";
 import { createPrismaClient } from "../config/database.js";
+import { env } from "../config/env.js";
 import { 
   PrismaSessionRepository,
   PrismaTrackRepository,
@@ -9,6 +10,7 @@ import {
 import { SessionService } from "../services/sessionService.js";
 import { HealthService } from "../services/healthService.js";
 import { S3StorageProvider } from "../storage/s3Storage.js";
+import type { IStorageProvider } from "../storage/storageProvider.js";
 import { PinoLogger, createLogger } from "../config/logger.js";
 import { PrometheusMetrics } from "../config/metrics.js";
 
@@ -51,7 +53,7 @@ export function configureContainer(): void {
   container.registerInstance(TOKENS.UploadTargetRepository, new PrismaUploadTargetRepository(prisma));
 
   // Register storage provider
-  container.registerInstance(TOKENS.StorageProvider, new S3StorageProvider());
+  container.registerInstance(TOKENS.StorageProvider, createStorageProvider());
 
   // Register business services
   const sessionService = new SessionService(
@@ -78,4 +80,18 @@ export function getContainer() {
  */
 export function resolve<T>(token: string): T {
   return container.resolve<T>(token);
+}
+
+function createStorageProvider(): IStorageProvider {
+  switch (env.STORAGE_PROVIDER) {
+    case "s3":
+    case "r2":
+      return new S3StorageProvider();
+    case "local":
+      throw new Error("Local storage provider not implemented. Set STORAGE_PROVIDER=s3 or STORAGE_PROVIDER=r2.");
+    default: {
+      const _exhaustive: never = env.STORAGE_PROVIDER;
+      return _exhaustive;
+    }
+  }
 }

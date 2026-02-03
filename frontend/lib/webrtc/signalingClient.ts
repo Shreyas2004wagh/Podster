@@ -5,17 +5,14 @@ type Listener = (payload: any) => void;
 
 interface SignalingOptions {
   sessionId: string;
-  token: string;
 }
 
 export class SignalingClient {
   private socket: Socket;
   private readonly sessionId: string;
-  private readonly token: string;
 
   constructor(options: SignalingOptions) {
     this.sessionId = options.sessionId;
-    this.token = options.token;
 
     // Connect to backend URL (remove /api/v1 if needed, or assume backend root handles socket.io)
     // Adjust based on your backend URL structure. 
@@ -25,9 +22,9 @@ export class SignalingClient {
     this.socket = io(url, {
       autoConnect: false,
       reconnection: true,
+      withCredentials: true,
       query: {
-        sessionId: this.sessionId,
-        token: this.token
+        sessionId: this.sessionId
       }
     });
 
@@ -38,7 +35,7 @@ export class SignalingClient {
     this.socket.on("connect", () => {
       console.log("Signaling: Connected to socket");
       // Explicitly join room after connection
-      this.socket.emit("join-room", { sessionId: this.sessionId, token: this.token });
+      this.socket.emit("join-room", { sessionId: this.sessionId });
     });
 
     this.socket.on("connect_error", (err) => {

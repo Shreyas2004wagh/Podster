@@ -3,7 +3,6 @@ import { SignalingClient } from "./signalingClient";
 
 interface UseWebRTCOptions {
     sessionId: string;
-    token: string | null;
     stream: MediaStream | null;
 }
 
@@ -19,7 +18,7 @@ const STUN_SERVERS = {
     ]
 };
 
-export function useWebRTC({ sessionId, token, stream }: UseWebRTCOptions) {
+export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
     const signaling = useRef<SignalingClient | null>(null);
     const peers = useRef<Map<string, RTCPeerConnection>>(new Map());
     const [remoteParticipants, setRemoteParticipants] = useState<RemoteParticipant[]>([]);
@@ -125,9 +124,9 @@ export function useWebRTC({ sessionId, token, stream }: UseWebRTCOptions) {
     }, [createPeerConnection]);
 
     useEffect(() => {
-        if (!sessionId || !token) return;
+        if (!sessionId) return;
 
-        const client = new SignalingClient({ sessionId, token });
+        const client = new SignalingClient({ sessionId });
         signaling.current = client;
 
         client.on("connect", () => console.log("WebRTC: connected to signaling"));
@@ -143,7 +142,7 @@ export function useWebRTC({ sessionId, token, stream }: UseWebRTCOptions) {
             peers.current.forEach((pc) => pc.close());
             peers.current.clear();
         };
-    }, [sessionId, token, handleUserJoined, handleOffer, handleAnswer, handleCandidate]);
+    }, [sessionId, handleUserJoined, handleOffer, handleAnswer, handleCandidate]);
 
     // Update tracks if stream changes
     useEffect(() => {
