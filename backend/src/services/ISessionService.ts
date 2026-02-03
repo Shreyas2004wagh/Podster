@@ -27,7 +27,17 @@ export interface ISessionService {
   }>;
 
   /**
+   * Mark session as live
+   */
+  markLive(sessionId: SessionId): Promise<Session | null>;
+
+  /**
    * Complete multipart upload and finalize session
    */
   completeUpload(sessionId: SessionId, uploadId: string, parts: any[]): Promise<Session | null>;
+
+  /**
+   * Request signed download URL for a track
+   */
+  getDownloadUrl(sessionId: SessionId, trackId: string): Promise<string>;
 }

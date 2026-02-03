@@ -157,6 +157,7 @@ import fp from "fastify-plugin";
 import { z } from "zod";
 import { ISessionService } from "../services/ISessionService.js";
 import { SessionRole } from "../models/session.js";
+import { env } from "../config/env.js";
 import { resolve, TOKENS } from "../container/container.js";
 
 const createSessionSchema = z.object({
@@ -183,6 +184,17 @@ const completeUploadSchema = z.object({
 export default fp(async (fastify) => {
   // Resolve SessionService from the DI container
   const service = resolve<ISessionService>(TOKENS.SessionService);
+  const TOKEN_COOKIE = "podster_token";
+
+  const setAuthCookie = (reply: any, token: string) => {
+    reply.setCookie(TOKEN_COOKIE, token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      domain: undefined
+    });
+  };
 
   fastify.post("/sessions", async (request, reply) => {
     try {
@@ -191,6 +203,7 @@ export default fp(async (fastify) => {
       const session = await service.createSession({ title: body.title, hostId });
       const hostToken = fastify.issueHostToken({ hostId });
       const guestToken = fastify.issueGuestToken({ sessionId: session.id, guestName: "Guest" });
+      setAuthCookie(reply, hostToken);
       reply.code(201).send({ session, hostToken, guestToken });
     } catch (err) {
       request.log.error({ err }, "Failed to create session");
@@ -218,12 +231,42 @@ export default fp(async (fastify) => {
       const sessionId = (request.params as { id: string }).id;
       const body = z.object({ guestName: z.string().min(1) }).parse(request.body);
       const token = fastify.issueGuestToken({ sessionId, guestName: body.guestName });
+      setAuthCookie(reply, token);
       reply.send({ token });
     } catch (err) {
       request.log.error({ err }, "Failed to join session");
       reply.code(400).send({ message: err instanceof Error ? err.message : "Invalid request" });
     }
   });
+
+  fastify.post(
+    "/sessions/:id/start",
+    { preHandler: fastify.authenticateAny },
+    async (request, reply) => {
+      try {
+        const sessionId = (request.params as { id: string }).id;
+        const session = await service.getSession(sessionId);
+        if (!session) {
+          reply.code(404).send({ message: "Session not found" });
+          return;
+        }
+        const user = request.user as { sub: string; role: SessionRole } | undefined;
+        if (user?.role === SessionRole.Host && user.sub !== session.hostId) {
+          reply.code(403).send({ message: "Forbidden" });
+          return;
+        }
+        if (user?.role === SessionRole.Guest && user.sub !== sessionId) {
+          reply.code(403).send({ message: "Forbidden" });
+          return;
+        }
+        const updated = await service.markLive(sessionId);
+        reply.send(updated);
+      } catch (err) {
+        request.log.error({ err }, "Failed to mark session live");
+        reply.code(400).send({ message: err instanceof Error ? err.message : "Invalid request" });
+      }
+    }
+  );
 
   fastify.post(
     "/sessions/:id/upload-urls",
@@ -257,17 +300,49 @@ export default fp(async (fastify) => {
     }
   );
 
+  fastify.get(
+    "/sessions/:id/tracks/:trackId/download",
+    { preHandler: fastify.authenticateAny },
+    async (request, reply) => {
+      try {
+        const params = request.params as { id: string; trackId: string };
+        const session = await service.getSession(params.id);
+        if (!session) {
+          reply.code(404).send({ message: "Session not found" });
+          return;
+        }
+        const user = request.user as { sub: string; role: SessionRole } | undefined;
+        if (user?.role === SessionRole.Guest && user.sub !== params.id) {
+          reply.code(403).send({ message: "Forbidden" });
+          return;
+        }
+        if (user?.role === SessionRole.Host && user.sub !== session.hostId) {
+          reply.code(403).send({ message: "Forbidden" });
+          return;
+        }
+        const url = await service.getDownloadUrl(params.id, params.trackId);
+        reply.send({ url });
+      } catch (err) {
+        request.log.error({ err }, "Failed to get download URL");
+        reply.code(400).send({ message: err instanceof Error ? err.message : "Invalid request" });
+      }
+    }
+  );
+
   fastify.addHook("preHandler", async (request, _reply) => {
     // Attach basic role info if token present; endpoint-level guards enforce specifics.
     const authHeader = request.headers.authorization;
-    if (authHeader?.startsWith("Bearer ")) {
-      const token = authHeader.replace("Bearer ", "");
-      try {
-        const decoded = (await (request as any).hostJwtVerify(token)) as { sub: string };
+    const token =
+      authHeader?.startsWith("Bearer ") ? authHeader.replace("Bearer ", "") : request.cookies?.podster_token;
+    if (!token) return;
+    try {
+      // @ts-ignore
+      const decoded = await fastify.jwt.verify(token, { secret: env.HOST_JWT_SECRET });
+      if (decoded.role === SessionRole.Host) {
         request.user = { sub: decoded.sub, role: SessionRole.Host };
-      } catch {
-        // ignore; guest routes handled separately
       }
+    } catch {
+      // ignore; endpoint-level guards handle auth
     }
   });
 });
