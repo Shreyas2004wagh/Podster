@@ -12,6 +12,7 @@ import {
 import { ISessionService } from "./ISessionService.js";
 import { ILogger, createChildLogger } from "../config/logger.js";
 import { IMetrics, PrometheusMetrics } from "../config/metrics.js";
+import { env } from "../config/env.js";
 
 export class SessionService implements ISessionService {
   private readonly logger: ILogger;
@@ -137,8 +138,8 @@ export class SessionService implements ISessionService {
       const key = `sessions/${sessionId}/${Date.now()}.webm`;
       const { uploadId, urls } = await this.storage.createMultipartUpload({ key, partCount });
 
-      // Update session status if it's still in draft
-      if (session.status === SessionStatus.DRAFT) {
+      // Update session status if it isn't already uploading
+      if (session.status === SessionStatus.DRAFT || session.status === SessionStatus.LIVE) {
         await this.sessionRepository.update(sessionId, { 
           status: SessionStatus.UPLOADING 
         });
@@ -148,8 +149,8 @@ export class SessionService implements ISessionService {
           sessionId,
           uploadId,
           key,
-          bucket: "podster",
-          provider: StorageProvider.S3,
+          bucket: env.STORAGE_BUCKET,
+          provider: this.resolveStorageProvider(),
           expiresAt: new Date(Date.now() + 15 * 60 * 1000)
         };
         await this.uploadTargetRepository.create(uploadTargetInput);
@@ -277,6 +278,35 @@ export class SessionService implements ISessionService {
         },
       }, `Upload completion failed after ${duration}ms`);
       throw error;
+    }
+  }
+
+  async markLive(sessionId: SessionId) {
+    const session = await this.sessionRepository.findById(sessionId);
+    if (!session) throw new Error("Session not found");
+    if (session.status !== SessionStatus.LIVE) {
+      await this.sessionRepository.update(sessionId, { status: SessionStatus.LIVE });
+    }
+    return this.sessionRepository.findByIdWithTracks(sessionId);
+  }
+
+  async getDownloadUrl(sessionId: SessionId, trackId: string): Promise<string> {
+    const track = await this.trackRepository.findById(trackId);
+    if (!track) throw new Error("Track not found");
+    if (track.sessionId !== sessionId) throw new Error("Track does not belong to session");
+    if (!track.completedAt) throw new Error("Track not uploaded yet");
+    return this.storage.getSignedDownloadUrl({ key: track.objectKey });
+  }
+
+  private resolveStorageProvider(): StorageProvider {
+    switch (process.env.STORAGE_PROVIDER) {
+      case "r2":
+        return StorageProvider.R2;
+      case "local":
+        return StorageProvider.LOCAL;
+      case "s3":
+      default:
+        return StorageProvider.S3;
     }
   }
 }
