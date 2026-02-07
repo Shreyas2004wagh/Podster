@@ -2,8 +2,7 @@ import {
   S3Client,
   CreateMultipartUploadCommand,
   CompleteMultipartUploadCommand,
-  UploadPartCommand,
-  GetObjectCommand
+  UploadPartCommand
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env } from "../config/env.js";
@@ -14,6 +13,7 @@ import type {
   MultipartUploadResponse,
   IStorageProvider
 } from "./storageProvider.js";
+import { generatePresignedGetUrl } from "./presign.js";
 
 export class S3StorageProvider implements IStorageProvider {
   private readonly s3: S3Client;
@@ -64,22 +64,13 @@ export class S3StorageProvider implements IStorageProvider {
   }
 
   async completeMultipartUpload(request: CompleteUploadRequest): Promise<void> {
-    console.log("S3 completeMultipartUpload called", { 
-      key: request.key, 
-      uploadId: request.uploadId, 
-      partsCount: request.parts?.length,
-      parts: request.parts 
-    });
-    
     const sortedParts = request.parts
       .sort((a, b) => a.partNumber - b.partNumber)
       .map((p) => ({
         ETag: p.etag,
         PartNumber: p.partNumber
       }));
-    
-    console.log("S3 parts after sorting", sortedParts);
-    
+
     const command = new CompleteMultipartUploadCommand({
       Bucket: env.STORAGE_BUCKET,
       Key: request.key,
@@ -89,15 +80,16 @@ export class S3StorageProvider implements IStorageProvider {
       }
     });
 
-    const result = await this.s3.send(command);
-    console.log("S3 completeMultipartUpload result", result);
+    await this.s3.send(command);
   }
 
   async getSignedDownloadUrl(request: DownloadUrlRequest): Promise<string> {
-    const command = new GetObjectCommand({
-      Bucket: env.STORAGE_BUCKET,
-      Key: request.key
+    return generatePresignedGetUrl({
+      client: this.s3,
+      bucket: env.STORAGE_BUCKET,
+      key: request.key,
+      expiresInSeconds: request.expiresInSeconds ?? 900,
+      contentType: "video/webm"
     });
-    return getSignedUrl(this.s3, command, { expiresIn: request.expiresInSeconds ?? 900 });
   }
 }
