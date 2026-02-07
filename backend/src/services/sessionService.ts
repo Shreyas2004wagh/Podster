@@ -13,6 +13,14 @@ import { ISessionService } from "./ISessionService.js";
 import { ILogger, createChildLogger } from "../config/logger.js";
 import { IMetrics, PrometheusMetrics } from "../config/metrics.js";
 import { env } from "../config/env.js";
+import { StorageObjectNotFoundError, StorageProviderError } from "../storage/errors.js";
+import {
+  RecordingNotFoundError,
+  RecordingUrlGenerationError,
+  SessionNotFoundError
+} from "./errors.js";
+
+const RECORDING_URL_TTL_SECONDS = 60 * 60;
 
 export class SessionService implements ISessionService {
   private readonly logger: ILogger;
@@ -296,6 +304,56 @@ export class SessionService implements ISessionService {
     if (track.sessionId !== sessionId) throw new Error("Track does not belong to session");
     if (!track.completedAt) throw new Error("Track not uploaded yet");
     return this.storage.getSignedDownloadUrl({ key: track.objectKey });
+  }
+
+  async getRecordingUrl(sessionId: SessionId): Promise<string> {
+    const session = await this.sessionRepository.findByIdWithTracks(sessionId);
+    if (!session) {
+      throw new SessionNotFoundError(sessionId);
+    }
+
+    const latestCompletedRecording = [...session.tracks]
+      .reverse()
+      .find(
+        (track) =>
+          track.kind === TrackKind.VIDEO &&
+          Boolean(track.completedAt) &&
+          track.objectKey.endsWith(".webm")
+      );
+
+    if (!latestCompletedRecording) {
+      throw new RecordingNotFoundError(sessionId);
+    }
+
+    try {
+      return await this.storage.getSignedDownloadUrl({
+        key: latestCompletedRecording.objectKey,
+        expiresInSeconds: RECORDING_URL_TTL_SECONDS
+      });
+    } catch (error) {
+      if (error instanceof StorageObjectNotFoundError) {
+        throw new RecordingNotFoundError(sessionId);
+      }
+
+      this.logger.error(
+        {
+          event: "recording_url_generation_failed",
+          sessionId,
+          objectKey: latestCompletedRecording.objectKey,
+          error: {
+            name: (error as Error).name,
+            message: (error as Error).message
+          }
+        },
+        "Failed to generate recording URL"
+      );
+
+      if (error instanceof StorageProviderError) {
+        throw new RecordingUrlGenerationError(sessionId, error);
+      }
+
+      throw error;
+    }
   }
 
   private resolveStorageProvider(): StorageProvider {
