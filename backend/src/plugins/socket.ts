@@ -3,6 +3,11 @@ import { Server, Socket } from "socket.io";
 import { env } from "../config/env.js";
 import { SessionRole } from "../models/session.js";
 
+type TokenPayload = {
+    sub: string;
+    role: SessionRole;
+};
+
 declare module "fastify" {
     interface FastifyInstance {
         io: Server;
@@ -43,7 +48,9 @@ export default fp(async (fastify) => {
             }
             try {
                 // @ts-ignore
-                const decoded = await fastify.jwt.verify(token, { secret: env.HOST_JWT_SECRET });
+                const decoded = (await (fastify.jwt as any).verify(token, {
+                    secret: env.HOST_JWT_SECRET
+                })) as TokenPayload;
                 if (decoded.role === SessionRole.Host) {
                     socket.data.user = { sub: decoded.sub, role: SessionRole.Host };
                     return next();
@@ -52,7 +59,9 @@ export default fp(async (fastify) => {
                 // fallthrough to guest verification
             }
             // @ts-ignore
-            const decodedGuest = await fastify.jwt.verify(token, { secret: env.GUEST_JWT_SECRET });
+            const decodedGuest = (await (fastify.jwt as any).verify(token, {
+                secret: env.GUEST_JWT_SECRET
+            })) as TokenPayload;
             if (decodedGuest.role !== SessionRole.Guest) {
                 return next(new Error("Invalid token role"));
             }

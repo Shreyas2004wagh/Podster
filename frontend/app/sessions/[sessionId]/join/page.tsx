@@ -19,7 +19,7 @@ export default function JoinSessionPage() {
     setIsJoining(true);
     setError(null);
     try {
-      const response = await joinSession(params.sessionId, { guestName: name });
+      await joinSession(params.sessionId, { guestName: name });
       router.push(`/sessions/${params.sessionId}/record`);
     } catch (err) {
       setError((err as Error).message);

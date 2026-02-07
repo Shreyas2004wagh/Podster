@@ -186,6 +186,11 @@ const completeUploadSchema = z.object({
     .default([])
 });
 
+type TokenPayload = {
+  sub: string;
+  role: SessionRole;
+};
+
 export default fp(async (fastify) => {
   // Resolve SessionService from the DI container
   const service = resolve<ISessionService>(TOKENS.SessionService);
@@ -387,7 +392,9 @@ export default fp(async (fastify) => {
     if (!token) return;
     try {
       // @ts-ignore
-      const decoded = await fastify.jwt.verify(token, { secret: env.HOST_JWT_SECRET });
+      const decoded = (await (fastify.jwt as any).verify(token, {
+        secret: env.HOST_JWT_SECRET
+      })) as TokenPayload;
       if (decoded.role === SessionRole.Host) {
         request.user = { sub: decoded.sub, role: SessionRole.Host };
       }
