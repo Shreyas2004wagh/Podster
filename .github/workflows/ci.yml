@@ -28,6 +28,8 @@ jobs:
         run: pnpm --filter @podster/shared build
       - name: Build frontend
         run: pnpm --filter frontend build
+      - name: Generate Prisma client
+        run: pnpm --filter backend db:generate
       - name: Build backend
         run: pnpm --filter backend build
       - name: Install Playwright browser
