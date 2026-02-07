@@ -159,6 +159,11 @@ import { ISessionService } from "../services/ISessionService.js";
 import { SessionRole } from "../models/session.js";
 import { env } from "../config/env.js";
 import { resolve, TOKENS } from "../container/container.js";
+import {
+  RecordingNotFoundError,
+  RecordingUrlGenerationError,
+  SessionNotFoundError
+} from "../services/errors.js";
 
 const createSessionSchema = z.object({
   title: z.string().min(1),
@@ -328,6 +333,51 @@ export default fp(async (fastify) => {
       }
     }
   );
+
+  const getRecordingHandler = async (request: any, reply: any) => {
+    const sessionId = (request.params as { id: string }).id;
+
+    try {
+      const session = await service.getSession(sessionId);
+      if (!session) {
+        reply.code(404).send({ message: "Session not found" });
+        return;
+      }
+
+      const user = request.user as { sub: string; role: SessionRole } | undefined;
+      if (!user) {
+        reply.code(401).send({ message: "Authentication required" });
+        return;
+      }
+      if (user.role === SessionRole.Host && user.sub !== session.hostId) {
+        reply.code(403).send({ message: "Forbidden" });
+        return;
+      }
+      if (user.role === SessionRole.Guest && user.sub !== sessionId) {
+        reply.code(403).send({ message: "Forbidden" });
+        return;
+      }
+
+      const url = await service.getRecordingUrl(sessionId);
+      reply.send({ url });
+    } catch (err) {
+      if (err instanceof SessionNotFoundError || err instanceof RecordingNotFoundError) {
+        reply.code(404).send({ message: err.message });
+        return;
+      }
+      if (err instanceof RecordingUrlGenerationError) {
+        request.log.error({ err, sessionId }, "Storage error while generating recording URL");
+        reply.code(502).send({ message: "Failed to generate recording URL" });
+        return;
+      }
+
+      request.log.error({ err, sessionId }, "Failed to get recording URL");
+      reply.code(500).send({ message: "Internal server error" });
+    }
+  };
+
+  fastify.get("/sessions/:id/recording", { preHandler: fastify.authenticateAny }, getRecordingHandler);
+  fastify.get("/api/sessions/:id/recording", { preHandler: fastify.authenticateAny }, getRecordingHandler);
 
   fastify.addHook("preHandler", async (request, _reply) => {
     // Attach basic role info if token present; endpoint-level guards enforce specifics.

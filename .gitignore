@@ -12,6 +12,7 @@ pnpm-lock.yaml
 tmp
 .idea
 .vscode
+backend/.postgres-local/
 nul
 "nul" 
 "frontend/test-results/" 
