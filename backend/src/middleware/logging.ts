@@ -8,11 +8,12 @@ export default fp(async (fastify) => {
   // Log incoming requests
   fastify.addHook("onRequest", async (request) => {
     const startTime = Date.now();
+    const reqLogger = request.logger ?? request.log;
     
     // Store start time for duration calculation
     (request as any).startTime = startTime;
 
-    request.logger.info({
+    reqLogger.info({
       event: "request_start",
       method: request.method,
       url: request.url,
@@ -29,9 +30,10 @@ export default fp(async (fastify) => {
   // Log request body for POST/PUT requests (with size limit)
   fastify.addHook("preHandler", async (request) => {
     if (["POST", "PUT", "PATCH"].includes(request.method)) {
+      const reqLogger = request.logger ?? request.log;
       const bodySize = JSON.stringify(request.body || {}).length;
       
-      request.logger.debug({
+      reqLogger.debug({
         event: "request_body",
         bodySize,
         body: bodySize < 1000 ? request.body : "[BODY_TOO_LARGE]",
@@ -41,10 +43,11 @@ export default fp(async (fastify) => {
 
   // Log responses
   fastify.addHook("onSend", async (request, reply, payload) => {
+    const reqLogger = request.logger ?? request.log;
     const duration = Date.now() - ((request as any).startTime || Date.now());
     const responseSize = typeof payload === "string" ? payload.length : 0;
 
-    request.logger.info({
+    reqLogger.info({
       event: "request_complete",
       method: request.method,
       url: request.url,
@@ -59,9 +62,10 @@ export default fp(async (fastify) => {
 
   // Log errors
   fastify.addHook("onError", async (request, reply, error) => {
+    const reqLogger = request.logger ?? request.log;
     const duration = Date.now() - ((request as any).startTime || Date.now());
 
-    request.logger.error({
+    reqLogger.error({
       event: "request_error",
       method: request.method,
       url: request.url,
