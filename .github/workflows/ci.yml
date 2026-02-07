@@ -24,6 +24,8 @@ jobs:
           node-version: ${{ matrix.node-version }}
       - name: Install dependencies
         run: pnpm install
+      - name: Build shared package
+        run: pnpm --filter @podster/shared build
       - name: Build frontend
         run: pnpm --filter frontend build
       - name: Build backend
