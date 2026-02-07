@@ -40,4 +40,9 @@ export interface ISessionService {
    * Request signed download URL for a track
    */
   getDownloadUrl(sessionId: SessionId, trackId: string): Promise<string>;
+
+  /**
+   * Request signed download URL for the latest completed session recording
+   */
+  getRecordingUrl(sessionId: SessionId): Promise<string>;
 }
