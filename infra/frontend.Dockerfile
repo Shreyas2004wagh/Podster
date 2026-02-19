@@ -5,7 +5,7 @@ ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 RUN corepack enable
 
-COPY package.json pnpm-workspace.yaml ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY frontend/package.json frontend/package.json
 COPY shared/package.json shared/package.json
 RUN pnpm install --frozen-lockfile || pnpm install
