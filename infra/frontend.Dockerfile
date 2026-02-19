@@ -8,7 +8,7 @@ RUN corepack enable
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY frontend/package.json frontend/package.json
 COPY shared/package.json shared/package.json
-RUN pnpm install --frozen-lockfile || pnpm install
+RUN pnpm install --frozen-lockfile
 
 COPY . .
 RUN pnpm --filter @podster/shared build
