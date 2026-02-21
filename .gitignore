@@ -10,6 +10,7 @@ build
 pnpm-lock.yaml
 *.log
 tmp
+.tmp-runner-sim-*/
 .idea
 .vscode
 backend/.postgres-local/
