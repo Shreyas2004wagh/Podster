@@ -85,6 +85,10 @@ export default fp(async (fastify) => {
     fastify.io.on("connection", (socket: Socket) => {
         fastify.log.info({ socketId: socket.id }, "Socket connected");
 
+        const emitUserLeft = (sessionId: string) => {
+            socket.to(sessionId).emit("user-left", { socketId: socket.id });
+        };
+
         // Join a session room
         socket.on("join-room", async (data: { sessionId?: string }) => {
             const sessionId = data?.sessionId;
@@ -108,7 +112,9 @@ export default fp(async (fastify) => {
                 }
 
                 if (sessionData.sessionId) {
-                    await socket.leave(sessionData.sessionId);
+                    const previousSessionId = sessionData.sessionId;
+                    await socket.leave(previousSessionId);
+                    emitUserLeft(previousSessionId);
                 }
 
                 await socket.join(sessionId);
@@ -125,6 +131,18 @@ export default fp(async (fastify) => {
                 fastify.log.error({ err: e }, "Socket auth failed");
                 socket.disconnect();
             }
+        });
+
+        socket.on("leave-room", async () => {
+            const sessionData = socket.data as SocketSessionData;
+            const activeSessionId = sessionData.sessionId;
+            if (!activeSessionId) {
+                return;
+            }
+            await socket.leave(activeSessionId);
+            emitUserLeft(activeSessionId);
+            delete sessionData.sessionId;
+            fastify.log.info({ socketId: socket.id, sessionId: activeSessionId }, "Left room");
         });
 
         // WebRTC Signaling events
@@ -160,12 +178,17 @@ export default fp(async (fastify) => {
         socket.on("answer", forwardEvent("answer"));
         socket.on("ice-candidate", forwardEvent("ice-candidate"));
 
+        socket.on("disconnecting", () => {
+            const sessionData = socket.data as SocketSessionData;
+            if (sessionData.sessionId) {
+                emitUserLeft(sessionData.sessionId);
+            }
+        });
+
         socket.on("disconnect", () => {
+            const sessionData = socket.data as SocketSessionData;
+            delete sessionData.sessionId;
             fastify.log.info({ socketId: socket.id }, "Socket disconnected");
-            // TODO: Notify rooms this socket was in?
-            // socket.io handles room leave auto, but we might want to emit 'user-left' manually
-            // Since we don't track which room easily here without extra state,
-            // rely on clients handling peer disconnection or improve tracking.
         });
     });
 });
