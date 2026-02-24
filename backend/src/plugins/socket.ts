@@ -130,7 +130,8 @@ export default fp(async (fastify) => {
         // WebRTC Signaling events
         const forwardEvent = (event: string) => (payload: SignalingPayload | undefined) => {
             const sessionData = socket.data as SocketSessionData;
-            if (!sessionData.sessionId) {
+            const activeSessionId = sessionData.sessionId;
+            if (!activeSessionId) {
                 fastify.log.warn({ event, from: socket.id }, "Dropping signaling event before room join");
                 return;
             }
@@ -139,6 +140,18 @@ export default fp(async (fastify) => {
                 return;
             }
             const { to, ...rest } = payload;
+            const targetSocket = fastify.io.sockets.sockets.get(to);
+            if (!targetSocket) {
+                fastify.log.warn({ event, from: socket.id, to }, "Dropping signaling event for unknown target socket");
+                return;
+            }
+            if (!targetSocket.rooms.has(activeSessionId)) {
+                fastify.log.warn(
+                    { event, from: socket.id, to, sessionId: activeSessionId },
+                    "Dropping cross-session signaling event"
+                );
+                return;
+            }
             fastify.log.debug({ event, from: socket.id, to }, "Signal forwarding");
             socket.to(to).emit(event, { ...rest, from: socket.id });
         };
