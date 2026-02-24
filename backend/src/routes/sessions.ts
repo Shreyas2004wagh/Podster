@@ -288,6 +288,16 @@ export default fp(async (fastify) => {
     async (request, reply) => {
       try {
         const sessionId = (request.params as { id: string }).id;
+        const session = await service.getSession(sessionId);
+        if (!session) {
+          reply.code(404).send({ message: "Session not found" });
+          return;
+        }
+        const user = request.user as { sub: string; role: SessionRole } | undefined;
+        if (!user || user.role !== SessionRole.Host || user.sub !== session.hostId) {
+          reply.code(403).send({ message: "Forbidden" });
+          return;
+        }
         const body = uploadUrlSchema.parse(request.body);
         const result = await service.requestUploadUrls(sessionId, body.partCount);
         reply.send(result);
@@ -304,9 +314,19 @@ export default fp(async (fastify) => {
     async (request, reply) => {
       try {
         const sessionId = (request.params as { id: string }).id;
+        const existingSession = await service.getSession(sessionId);
+        if (!existingSession) {
+          reply.code(404).send({ message: "Session not found" });
+          return;
+        }
+        const user = request.user as { sub: string; role: SessionRole } | undefined;
+        if (!user || user.role !== SessionRole.Host || user.sub !== existingSession.hostId) {
+          reply.code(403).send({ message: "Forbidden" });
+          return;
+        }
         const body = completeUploadSchema.parse(request.body);
-        const session = await service.completeUpload(sessionId, body.uploadId, body.parts);
-        reply.send(session);
+        const updatedSession = await service.completeUpload(sessionId, body.uploadId, body.parts);
+        reply.send(updatedSession);
       } catch (err) {
         request.log.error({ err }, "Failed to complete upload");
         reply.code(400).send({ message: err instanceof Error ? err.message : "Invalid request" });
