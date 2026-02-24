@@ -102,6 +102,15 @@ export default fp(async (fastify) => {
                     throw new Error("Guest token does not match session");
                 }
 
+                if (sessionData.sessionId === sessionId) {
+                    fastify.log.debug({ socketId: socket.id, sessionId }, "Socket already in room");
+                    return;
+                }
+
+                if (sessionData.sessionId) {
+                    await socket.leave(sessionData.sessionId);
+                }
+
                 await socket.join(sessionId);
                 sessionData.sessionId = sessionId;
 
