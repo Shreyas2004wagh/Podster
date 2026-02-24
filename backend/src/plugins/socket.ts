@@ -8,6 +8,16 @@ type TokenPayload = {
     role: SessionRole;
 };
 
+type SocketUser = {
+    sub: string;
+    role: SessionRole;
+};
+
+type SocketSessionData = {
+    user?: SocketUser;
+    sessionId?: string;
+};
+
 declare module "fastify" {
     interface FastifyInstance {
         io: Server;
@@ -52,7 +62,7 @@ export default fp(async (fastify) => {
                     secret: env.HOST_JWT_SECRET
                 })) as TokenPayload;
                 if (decoded.role === SessionRole.Host) {
-                    socket.data.user = { sub: decoded.sub, role: SessionRole.Host };
+                    (socket.data as SocketSessionData).user = { sub: decoded.sub, role: SessionRole.Host };
                     return next();
                 }
             } catch {
@@ -65,7 +75,7 @@ export default fp(async (fastify) => {
             if (decodedGuest.role !== SessionRole.Guest) {
                 return next(new Error("Invalid token role"));
             }
-            socket.data.user = { sub: decodedGuest.sub, role: SessionRole.Guest };
+            (socket.data as SocketSessionData).user = { sub: decodedGuest.sub, role: SessionRole.Guest };
             return next();
         } catch (err) {
             return next(err as Error);
@@ -83,7 +93,8 @@ export default fp(async (fastify) => {
                 if (!sessionId || typeof sessionId !== "string") {
                     throw new Error("Invalid session id");
                 }
-                const user = socket.data.user as { sub: string; role: SessionRole } | undefined;
+                const sessionData = socket.data as SocketSessionData;
+                const user = sessionData.user;
                 if (!user) {
                     throw new Error("Unauthorized");
                 }
@@ -92,6 +103,7 @@ export default fp(async (fastify) => {
                 }
 
                 await socket.join(sessionId);
+                sessionData.sessionId = sessionId;
 
                 // Notify others in room
                 socket.to(sessionId).emit("user-joined", {
