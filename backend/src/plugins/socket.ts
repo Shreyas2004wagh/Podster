@@ -129,6 +129,11 @@ export default fp(async (fastify) => {
 
         // WebRTC Signaling events
         const forwardEvent = (event: string) => (payload: SignalingPayload | undefined) => {
+            const sessionData = socket.data as SocketSessionData;
+            if (!sessionData.sessionId) {
+                fastify.log.warn({ event, from: socket.id }, "Dropping signaling event before room join");
+                return;
+            }
             if (!payload || typeof payload.to !== "string" || payload.to.trim().length === 0) {
                 fastify.log.warn({ event, from: socket.id, payload }, "Dropping malformed signaling payload");
                 return;
