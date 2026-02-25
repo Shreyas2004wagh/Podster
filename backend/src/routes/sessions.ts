@@ -171,7 +171,7 @@ const createSessionSchema = z.object({
 });
 
 const uploadUrlSchema = z.object({
-  partCount: z.number().min(1)
+  partCount: z.number().int().min(1).max(10_000)
 });
 
 const completeUploadSchema = z.object({
@@ -179,8 +179,8 @@ const completeUploadSchema = z.object({
   parts: z
     .array(
       z.object({
-        etag: z.string(),
-        partNumber: z.number()
+        etag: z.string().trim().min(1),
+        partNumber: z.number().int().min(1)
       })
     )
     .default([])
