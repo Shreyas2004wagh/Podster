@@ -16,7 +16,7 @@ export default fp(async (fastify) => {
       
       reply.code(statusCode).send(health);
     } catch (error) {
-      request.logger.error({
+      request.log.error({
         event: "health_check_error",
         error: {
           name: (error as Error).name,
@@ -44,7 +44,7 @@ export default fp(async (fastify) => {
         reply.code(503).send({ status: "not ready" });
       }
     } catch (error) {
-      request.logger.error({
+      request.log.error({
         event: "readiness_check_error",
         error: {
           name: (error as Error).name,
@@ -67,7 +67,7 @@ export default fp(async (fastify) => {
         reply.code(503).send({ status: "not alive" });
       }
     } catch (error) {
-      request.logger.error({
+      request.log.error({
         event: "liveness_check_error",
         error: {
           name: (error as Error).name,
@@ -85,7 +85,7 @@ export default fp(async (fastify) => {
       const metrics = await register.metrics();
       reply.type("text/plain").send(metrics);
     } catch (error) {
-      request.logger.error({
+      request.log.error({
         event: "metrics_export_error",
         error: {
           name: (error as Error).name,
@@ -124,7 +124,7 @@ export default fp(async (fastify) => {
       
       reply.code(statusCode).send(detailedHealth);
     } catch (error) {
-      request.logger.error({
+      request.log.error({
         event: "detailed_health_check_error",
         error: {
           name: (error as Error).name,
