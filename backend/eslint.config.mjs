@@ -5,7 +5,7 @@ import security from "eslint-plugin-security";
 
 export default tseslint.config(
   js.configs.recommended,
-  ...tseslint.configs.recommendedTypeChecked,
+  ...tseslint.configs.recommended,
   prettier,
   {
     ignores: ["dist"],
