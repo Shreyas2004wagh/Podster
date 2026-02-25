@@ -239,6 +239,11 @@ export default fp(async (fastify) => {
   fastify.post("/sessions/:id/join", async (request, reply) => {
     try {
       const sessionId = (request.params as { id: string }).id;
+      const session = await service.getSession(sessionId);
+      if (!session) {
+        reply.code(404).send({ message: "Session not found" });
+        return;
+      }
       const body = z.object({ guestName: z.string().min(1) }).parse(request.body);
       const token = fastify.issueGuestToken({ sessionId, guestName: body.guestName });
       setAuthCookie(reply, token);
