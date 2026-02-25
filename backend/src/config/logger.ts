@@ -1,5 +1,7 @@
 import pino from "pino";
 
+type LogContext = Record<string, unknown>;
+
 // Log levels: trace, debug, info, warn, error, fatal
 const logLevel = process.env.LOG_LEVEL || (process.env.NODE_ENV === "production" ? "info" : "debug");
 
@@ -45,7 +47,7 @@ export const logger = createLogger();
 /**
  * Create a child logger with additional context
  */
-export function createChildLogger(context: Record<string, any>) {
+export function createChildLogger(context: LogContext) {
   return logger.child(context);
 }
 
@@ -53,13 +55,13 @@ export function createChildLogger(context: Record<string, any>) {
  * Logger interface for dependency injection
  */
 export interface ILogger {
-  trace(obj: any, msg?: string): void;
-  debug(obj: any, msg?: string): void;
-  info(obj: any, msg?: string): void;
-  warn(obj: any, msg?: string): void;
-  error(obj: any, msg?: string): void;
-  fatal(obj: any, msg?: string): void;
-  child(bindings: Record<string, any>): ILogger;
+  trace(obj: unknown, msg?: string): void;
+  debug(obj: unknown, msg?: string): void;
+  info(obj: unknown, msg?: string): void;
+  warn(obj: unknown, msg?: string): void;
+  error(obj: unknown, msg?: string): void;
+  fatal(obj: unknown, msg?: string): void;
+  child(bindings: LogContext): ILogger;
 }
 
 /**
@@ -68,31 +70,31 @@ export interface ILogger {
 export class PinoLogger implements ILogger {
   constructor(private readonly pinoLogger: pino.Logger) {}
 
-  trace(obj: any, msg?: string): void {
+  trace(obj: unknown, msg?: string): void {
     this.pinoLogger.trace(obj, msg);
   }
 
-  debug(obj: any, msg?: string): void {
+  debug(obj: unknown, msg?: string): void {
     this.pinoLogger.debug(obj, msg);
   }
 
-  info(obj: any, msg?: string): void {
+  info(obj: unknown, msg?: string): void {
     this.pinoLogger.info(obj, msg);
   }
 
-  warn(obj: any, msg?: string): void {
+  warn(obj: unknown, msg?: string): void {
     this.pinoLogger.warn(obj, msg);
   }
 
-  error(obj: any, msg?: string): void {
+  error(obj: unknown, msg?: string): void {
     this.pinoLogger.error(obj, msg);
   }
 
-  fatal(obj: any, msg?: string): void {
+  fatal(obj: unknown, msg?: string): void {
     this.pinoLogger.fatal(obj, msg);
   }
 
-  child(bindings: Record<string, any>): ILogger {
+  child(bindings: LogContext): ILogger {
     return new PinoLogger(this.pinoLogger.child(bindings));
   }
 }

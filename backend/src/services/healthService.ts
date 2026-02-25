@@ -6,7 +6,7 @@ export interface HealthCheck {
   status: "healthy" | "unhealthy" | "degraded";
   responseTime: number;
   error?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface HealthStatus {
@@ -34,6 +34,10 @@ export class HealthService implements IHealthService {
     this.startTime = Date.now();
   }
 
+  private toErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : "Unknown error";
+  }
+
   async checkHealth(): Promise<HealthStatus> {
     const startTime = Date.now();
     
@@ -53,7 +57,7 @@ export class HealthService implements IHealthService {
           name: checkNames[index],
           status: "unhealthy" as const,
           responseTime: Date.now() - startTime,
-          error: result.reason?.message || "Unknown error",
+          error: this.toErrorMessage(result.reason),
         };
       }
     });
@@ -121,7 +125,7 @@ export class HealthService implements IHealthService {
         name: "database",
         status: "unhealthy",
         responseTime,
-        error: (error as Error).message,
+        error: this.toErrorMessage(error),
       };
     }
   }
@@ -149,7 +153,7 @@ export class HealthService implements IHealthService {
         name: "storage",
         status: "unhealthy",
         responseTime,
-        error: (error as Error).message,
+        error: this.toErrorMessage(error),
       };
     }
   }
