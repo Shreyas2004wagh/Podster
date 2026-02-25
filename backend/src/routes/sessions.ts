@@ -201,8 +201,7 @@ export default fp(async (fastify) => {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
-      path: "/",
-      domain: undefined
+      path: "/"
     });
   };
 
