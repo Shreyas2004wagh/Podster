@@ -16,7 +16,7 @@ declare module "fastify" {
 
 interface SignalingPayload {
     to: string; // socket ID of target
-    [key: string]: any;
+    [key: string]: unknown;
 }
 
 export default fp(async (fastify) => {
@@ -76,10 +76,13 @@ export default fp(async (fastify) => {
         fastify.log.info({ socketId: socket.id }, "Socket connected");
 
         // Join a session room
-        socket.on("join-room", async (data: { sessionId: string }) => {
-            const { sessionId } = data;
+        socket.on("join-room", async (data: { sessionId?: string }) => {
+            const sessionId = data?.sessionId;
 
             try {
+                if (!sessionId || typeof sessionId !== "string") {
+                    throw new Error("Invalid session id");
+                }
                 const user = socket.data.user as { sub: string; role: SessionRole } | undefined;
                 if (!user) {
                     throw new Error("Unauthorized");
@@ -104,7 +107,11 @@ export default fp(async (fastify) => {
         });
 
         // WebRTC Signaling events
-        const forwardEvent = (event: string) => (payload: SignalingPayload) => {
+        const forwardEvent = (event: string) => (payload: SignalingPayload | undefined) => {
+            if (!payload || typeof payload.to !== "string" || payload.to.trim().length === 0) {
+                fastify.log.warn({ event, from: socket.id, payload }, "Dropping malformed signaling payload");
+                return;
+            }
             const { to, ...rest } = payload;
             fastify.log.debug({ event, from: socket.id, to }, "Signal forwarding");
             socket.to(to).emit(event, { ...rest, from: socket.id });
