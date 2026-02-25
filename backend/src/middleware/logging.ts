@@ -6,12 +6,12 @@ import fp from "fastify-plugin";
  */
 export default fp(async (fastify) => {
   // Log incoming requests
-  fastify.addHook("onRequest", async (request) => {
+  fastify.addHook("onRequest", (request) => {
     const startTime = Date.now();
-    const reqLogger = request.logger ?? request.log;
+    const reqLogger = request.log;
     
     // Store start time for duration calculation
-    (request as any).startTime = startTime;
+    request.startTime = startTime;
 
     reqLogger.info({
       event: "request_start",
@@ -28,9 +28,9 @@ export default fp(async (fastify) => {
   });
 
   // Log request body for POST/PUT requests (with size limit)
-  fastify.addHook("preHandler", async (request) => {
+  fastify.addHook("preHandler", (request) => {
     if (["POST", "PUT", "PATCH"].includes(request.method)) {
-      const reqLogger = request.logger ?? request.log;
+      const reqLogger = request.log;
       const bodySize = JSON.stringify(request.body || {}).length;
       
       reqLogger.debug({
@@ -42,9 +42,9 @@ export default fp(async (fastify) => {
   });
 
   // Log responses
-  fastify.addHook("onSend", async (request, reply, payload) => {
-    const reqLogger = request.logger ?? request.log;
-    const duration = Date.now() - ((request as any).startTime || Date.now());
+  fastify.addHook("onSend", (request, reply, payload) => {
+    const reqLogger = request.log;
+    const duration = Date.now() - (request.startTime ?? Date.now());
     const responseSize = typeof payload === "string" ? payload.length : 0;
 
     reqLogger.info({
@@ -61,9 +61,10 @@ export default fp(async (fastify) => {
   });
 
   // Log errors
-  fastify.addHook("onError", async (request, reply, error) => {
-    const reqLogger = request.logger ?? request.log;
-    const duration = Date.now() - ((request as any).startTime || Date.now());
+  fastify.addHook("onError", (request, reply, error) => {
+    const reqLogger = request.log;
+    const duration = Date.now() - (request.startTime ?? Date.now());
+    const errorCode = "code" in error ? error.code : undefined;
 
     reqLogger.error({
       event: "request_error",
@@ -75,7 +76,7 @@ export default fp(async (fastify) => {
         name: error.name,
         message: error.message,
         stack: error.stack,
-        code: (error as any).code,
+        code: errorCode,
       },
       timestamp: new Date().toISOString(),
     }, `Request failed - ${error.message}`);
