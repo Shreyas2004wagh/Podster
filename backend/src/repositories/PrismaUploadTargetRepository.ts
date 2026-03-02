@@ -1,4 +1,4 @@
-import { PrismaClient, UploadTarget } from "@prisma/client";
+import { Prisma, PrismaClient, UploadTarget } from "@prisma/client";
 import {
   IUploadTargetRepository,
   UploadTargetId,
@@ -74,7 +74,7 @@ export class PrismaUploadTargetRepository implements IUploadTargetRepository {
   }
 
   async findByFilter(filter: UploadTargetFilter): Promise<UploadTarget[]> {
-    const where: any = {};
+    const where: Prisma.UploadTargetWhereInput = {};
     
     if (filter.sessionId) {
       where.sessionId = filter.sessionId;
@@ -144,7 +144,7 @@ export class PrismaUploadTargetRepository implements IUploadTargetRepository {
       return this.prisma.uploadTarget.count();
     }
 
-    const where: any = {};
+    const where: Prisma.UploadTargetWhereInput = {};
     
     if (filter.sessionId) {
       where.sessionId = filter.sessionId;
