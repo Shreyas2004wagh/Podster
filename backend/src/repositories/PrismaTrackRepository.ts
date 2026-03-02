@@ -1,4 +1,4 @@
-import { PrismaClient, Track } from "@prisma/client";
+import { Prisma, PrismaClient, Track } from "@prisma/client";
 import {
   ITrackRepository,
   TrackId,
@@ -63,7 +63,7 @@ export class PrismaTrackRepository implements ITrackRepository {
   }
 
   async findByFilter(filter: TrackFilter): Promise<Track[]> {
-    const where: any = {};
+    const where: Prisma.TrackWhereInput = {};
     
     if (filter.sessionId) {
       where.sessionId = filter.sessionId;
@@ -92,7 +92,7 @@ export class PrismaTrackRepository implements ITrackRepository {
   }
 
   // Track completion operations
-  async markCompleted(id: TrackId, parts: any): Promise<Track> {
+  async markCompleted(id: TrackId, parts: Prisma.InputJsonValue): Promise<Track> {
     return this.prisma.track.update({
       where: { id },
       data: {
@@ -135,7 +135,7 @@ export class PrismaTrackRepository implements ITrackRepository {
       return this.prisma.track.count();
     }
 
-    const where: any = {};
+    const where: Prisma.TrackWhereInput = {};
     
     if (filter.sessionId) {
       where.sessionId = filter.sessionId;
