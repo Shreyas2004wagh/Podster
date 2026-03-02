@@ -1,6 +1,6 @@
 import fp from "fastify-plugin";
-// @ts-ignore - TypeScript types for @fastify/jwt are not working properly
 import fastifyJwt from "@fastify/jwt";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import { env } from "../config/env.js";
 import { SessionRole } from "../models/session.js";
 
@@ -12,9 +12,9 @@ type TokenPayload = {
 
 declare module "fastify" {
   interface FastifyInstance {
-    authenticateHost: any;
-    authenticateGuest: any;
-    authenticateAny: any;
+    authenticateHost: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    authenticateGuest: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    authenticateAny: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
     issueHostToken: (payload: { hostId: string }) => string;
     issueGuestToken: (payload: { sessionId: string; guestName: string }) => string;
   }
@@ -27,42 +27,36 @@ export const authPlugin = fp(async (fastify) => {
     secret: env.HOST_JWT_SECRET
   });
 
-  // @ts-ignore
   fastify.decorate("issueHostToken", (payload: { hostId: string }) =>
-    // @ts-ignore
-    (fastify.jwt as any).sign({ sub: payload.hostId, role: SessionRole.Host })
+    fastify.jwt.sign({ sub: payload.hostId, role: SessionRole.Host }, { key: env.HOST_JWT_SECRET })
   );
 
-  // @ts-ignore
   fastify.decorate("issueGuestToken", (payload: { sessionId: string; guestName: string }) =>
-    // @ts-ignore
-    (fastify.jwt as any).sign(
+    fastify.jwt.sign(
       {
         sub: payload.sessionId,
         role: SessionRole.Guest,
         name: payload.guestName
       },
-      { secret: env.GUEST_JWT_SECRET }
+      { key: env.GUEST_JWT_SECRET }
     )
   );
 
-  const extractToken = (request: any) => {
+  const extractToken = (request: FastifyRequest) => {
     const authHeader = request.headers.authorization;
     if (authHeader?.startsWith("Bearer ")) return authHeader.replace("Bearer ", "");
     return request.cookies?.[TOKEN_COOKIE] ?? null;
   };
 
-  // @ts-ignore
   fastify.decorate(
     "authenticateHost",
-    async (request: any, reply: any) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const token = extractToken(request);
         if (!token) throw new Error("Host token missing");
-        // @ts-ignore
-        const decoded = (await (fastify.jwt as any).verify(token, {
-          secret: env.HOST_JWT_SECRET
-        })) as TokenPayload;
+        const decoded = fastify.jwt.verify<TokenPayload>(token, {
+          key: env.HOST_JWT_SECRET
+        });
         if (decoded.role !== SessionRole.Host) {
           throw new Error("Host token required");
         }
@@ -73,17 +67,15 @@ export const authPlugin = fp(async (fastify) => {
     }
   );
 
-  // @ts-ignore
   fastify.decorate(
     "authenticateGuest",
-    async (request: any, reply: any) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const token = extractToken(request);
         if (!token) throw new Error("Guest token missing");
-        // @ts-ignore
-        const decoded = (await (fastify.jwt as any).verify(token, {
-          secret: env.GUEST_JWT_SECRET
-        })) as TokenPayload;
+        const decoded = fastify.jwt.verify<TokenPayload>(token, {
+          key: env.GUEST_JWT_SECRET
+        });
         if (decoded.role !== SessionRole.Guest) {
           throw new Error("Guest token required");
         }
@@ -94,18 +86,16 @@ export const authPlugin = fp(async (fastify) => {
     }
   );
 
-  // @ts-ignore
   fastify.decorate(
     "authenticateAny",
-    async (request: any, reply: any) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const token = extractToken(request);
         if (!token) throw new Error("Token missing");
         try {
-          // @ts-ignore
-          const decoded = (await (fastify.jwt as any).verify(token, {
-            secret: env.HOST_JWT_SECRET
-          })) as TokenPayload;
+          const decoded = fastify.jwt.verify<TokenPayload>(token, {
+            key: env.HOST_JWT_SECRET
+          });
           if (decoded.role === SessionRole.Host) {
             request.user = { sub: decoded.sub, role: SessionRole.Host };
             return;
@@ -113,10 +103,9 @@ export const authPlugin = fp(async (fastify) => {
         } catch {
           // fallthrough to guest verification
         }
-        // @ts-ignore
-        const decodedGuest = (await (fastify.jwt as any).verify(token, {
-          secret: env.GUEST_JWT_SECRET
-        })) as TokenPayload;
+        const decodedGuest = fastify.jwt.verify<TokenPayload>(token, {
+          key: env.GUEST_JWT_SECRET
+        });
         if (decodedGuest.role !== SessionRole.Guest) {
           throw new Error("Invalid token role");
         }
