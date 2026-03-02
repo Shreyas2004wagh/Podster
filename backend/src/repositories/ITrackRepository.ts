@@ -1,4 +1,4 @@
-import { Track } from "@prisma/client";
+import { Prisma, Track } from "@prisma/client";
 
 // Type aliases
 export type TrackId = string;
@@ -16,7 +16,7 @@ export interface CreateTrackInput {
 export interface UpdateTrackInput {
   objectKey?: string;
   completedAt?: Date;
-  parts?: any; // JSONB type for upload parts
+  parts?: Prisma.InputJsonValue; // JSONB type for upload parts
 }
 
 export interface TrackFilter {
@@ -43,7 +43,7 @@ export interface ITrackRepository {
   findByFilter(filter: TrackFilter): Promise<Track[]>;
   
   // Track completion operations
-  markCompleted(id: TrackId, parts: any): Promise<Track>;
+  markCompleted(id: TrackId, parts: Prisma.InputJsonValue): Promise<Track>;
   findCompletedTracks(sessionId: SessionId): Promise<Track[]>;
   findIncompleteTracks(sessionId: SessionId): Promise<Track[]>;
   
