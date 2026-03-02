@@ -1,4 +1,5 @@
 import fp from "fastify-plugin";
+import type { FastifyReply, FastifyRequest } from "fastify";
 
 /**
  * @openapi
@@ -191,12 +192,16 @@ type TokenPayload = {
   role: SessionRole;
 };
 
+type SessionParams = {
+  id: string;
+};
+
 export default fp(async (fastify) => {
   // Resolve SessionService from the DI container
   const service = resolve<ISessionService>(TOKENS.SessionService);
   const TOKEN_COOKIE = "podster_token";
 
-  const setAuthCookie = (reply: any, token: string) => {
+  const setAuthCookie = (reply: FastifyReply, token: string) => {
     reply.setCookie(TOKEN_COOKIE, token, {
       httpOnly: true,
       sameSite: "lax",
@@ -363,8 +368,11 @@ export default fp(async (fastify) => {
     }
   );
 
-  const getRecordingHandler = async (request: any, reply: any) => {
-    const sessionId = (request.params as { id: string }).id;
+  const getRecordingHandler = async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const sessionId = (request.params as SessionParams).id;
 
     try {
       const session = await service.getSession(sessionId);
@@ -408,17 +416,17 @@ export default fp(async (fastify) => {
   fastify.get("/sessions/:id/recording", { preHandler: fastify.authenticateAny }, getRecordingHandler);
   fastify.get("/api/sessions/:id/recording", { preHandler: fastify.authenticateAny }, getRecordingHandler);
 
-  fastify.addHook("preHandler", async (request, _reply) => {
+  fastify.addHook("preHandler", async (request, reply) => {
+    void reply;
     // Attach basic role info if token present; endpoint-level guards enforce specifics.
     const authHeader = request.headers.authorization;
     const token =
       authHeader?.startsWith("Bearer ") ? authHeader.replace("Bearer ", "") : request.cookies?.podster_token;
     if (!token) return;
     try {
-      // @ts-ignore
-      const decoded = (await (fastify.jwt as any).verify(token, {
-        secret: env.HOST_JWT_SECRET
-      })) as TokenPayload;
+      const decoded = fastify.jwt.verify<TokenPayload>(token, {
+        key: env.HOST_JWT_SECRET
+      });
       if (decoded.role === SessionRole.Host) {
         request.user = { sub: decoded.sub, role: SessionRole.Host };
       }
