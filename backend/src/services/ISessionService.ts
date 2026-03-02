@@ -1,5 +1,6 @@
 import { Session } from "@prisma/client";
 import { CreateSessionInput, SessionId } from "../repositories/index.js";
+import { UploadedParts } from "../types/upload.js";
 
 /**
  * Interface for session business logic operations
@@ -34,7 +35,11 @@ export interface ISessionService {
   /**
    * Complete multipart upload and finalize session
    */
-  completeUpload(sessionId: SessionId, uploadId: string, parts: any[]): Promise<Session | null>;
+  completeUpload(
+    sessionId: SessionId,
+    uploadId: string,
+    parts: UploadedParts
+  ): Promise<Session | null>;
 
   /**
    * Request signed download URL for a track
