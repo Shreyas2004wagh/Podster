@@ -1,5 +1,6 @@
 import { SessionStatus, TrackKind, StorageProvider } from "@prisma/client";
 import type { IStorageProvider } from "../storage/storageProvider.js";
+import { UploadedParts } from "../types/upload.js";
 import { 
   type ISessionRepository, 
   type ITrackRepository, 
@@ -201,7 +202,7 @@ export class SessionService implements ISessionService {
     }
   }
 
-  async completeUpload(sessionId: SessionId, uploadId: string, parts: any[]) {
+  async completeUpload(sessionId: SessionId, uploadId: string, parts: UploadedParts) {
     const startTime = Date.now();
     
     try {
