@@ -57,10 +57,9 @@ export default fp(async (fastify) => {
                 return next(new Error("Missing auth token"));
             }
             try {
-                // @ts-ignore
-                const decoded = (await (fastify.jwt as any).verify(token, {
-                    secret: env.HOST_JWT_SECRET
-                })) as TokenPayload;
+                const decoded = fastify.jwt.verify<TokenPayload>(token, {
+                    key: env.HOST_JWT_SECRET
+                });
                 if (decoded.role === SessionRole.Host) {
                     (socket.data as SocketSessionData).user = { sub: decoded.sub, role: SessionRole.Host };
                     return next();
@@ -68,10 +67,9 @@ export default fp(async (fastify) => {
             } catch {
                 // fallthrough to guest verification
             }
-            // @ts-ignore
-            const decodedGuest = (await (fastify.jwt as any).verify(token, {
-                secret: env.GUEST_JWT_SECRET
-            })) as TokenPayload;
+            const decodedGuest = fastify.jwt.verify<TokenPayload>(token, {
+                key: env.GUEST_JWT_SECRET
+            });
             if (decodedGuest.role !== SessionRole.Guest) {
                 return next(new Error("Invalid token role"));
             }
