@@ -1,4 +1,4 @@
-import { Session, Track, UploadTarget } from "@prisma/client";
+import { Prisma, Session, Track, UploadTarget } from "@prisma/client";
 
 // Type aliases for better readability
 export type SessionId = string;
@@ -27,7 +27,7 @@ export interface CreateTrackInput {
 
 export interface UpdateTrackInput {
   completedAt?: Date;
-  parts?: any; // JSONB type
+  parts?: Prisma.InputJsonValue; // JSONB type
 }
 
 export interface CreateUploadTargetInput {
