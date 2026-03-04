@@ -24,7 +24,6 @@ self.onmessage = async (event: MessageEvent<UploadWorkerMessage>) => {
 
   if (event.data.type === "upload-chunks") {
     const queue = [...event.data.uploads];
-    const workers: Promise<void>[] = [];
 
     const uploadOne = async (job: { id: string; url: string; blob: Blob }) => {
       try {
@@ -61,20 +60,16 @@ self.onmessage = async (event: MessageEvent<UploadWorkerMessage>) => {
       }
     };
 
-    while (queue.length > 0 && workers.length < concurrentUploads) {
-      const job = queue.shift();
-      if (job) workers.push(uploadOne(job));
-    }
-
-    await Promise.all(
-      workers.map(async (workerPromise) => {
-        await workerPromise;
+    const runQueueWorker = async () => {
+      while (true) {
         const next = queue.shift();
-        if (next) {
-          await uploadOne(next);
-        }
-      })
-    );
+        if (!next) return;
+        await uploadOne(next);
+      }
+    };
+
+    const workerCount = Math.min(concurrentUploads, queue.length);
+    await Promise.all(Array.from({ length: workerCount }, () => runQueueWorker()));
   }
 };
 
