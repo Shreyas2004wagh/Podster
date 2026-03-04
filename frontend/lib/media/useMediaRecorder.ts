@@ -21,6 +21,7 @@ export function useMediaRecorder({
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
   const partNumber = useRef(0);
+  const pendingChunkSaves = useRef<Promise<void>[]>([]);
 
   const canRecord = useMemo(() => typeof window !== "undefined" && !!MediaRecorder, []);
 
@@ -64,11 +65,15 @@ export function useMediaRecorder({
     recorder.ondataavailable = async (event: BlobEvent) => {
       if (!event.data || event.data.size === 0) return;
       partNumber.current += 1;
-      await saveChunk(sessionId, {
+      const savePromise = saveChunk(sessionId, {
         partNumber: partNumber.current,
         blob: event.data,
         createdAt: Date.now(),
         userId
+      });
+      pendingChunkSaves.current.push(savePromise);
+      void savePromise.finally(() => {
+        pendingChunkSaves.current = pendingChunkSaves.current.filter((pending) => pending !== savePromise);
       });
     };
 
@@ -80,8 +85,12 @@ export function useMediaRecorder({
     recorder.onstop = () => {
       console.log("MediaRecorder stopped. Calling onStop callback...");
       setIsRecording(false);
-      setIsProcessing(false);
-      onStop?.();
+      void (async () => {
+        await Promise.allSettled(pendingChunkSaves.current);
+        pendingChunkSaves.current = [];
+        setIsProcessing(false);
+        onStop?.();
+      })();
     };
 
     setStartedAt(Date.now());
@@ -91,6 +100,7 @@ export function useMediaRecorder({
 
   const stopRecording = useCallback(() => {
     if (recorderRef.current && recorderRef.current.state !== "inactive") {
+      setIsProcessing(true);
       console.log("Stopping recorder...");
       recorderRef.current.requestData(); // Flush final data
       recorderRef.current.stop();

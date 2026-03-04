@@ -39,9 +39,6 @@ export default function RecordingRoomPage() {
     setCompletedParts([]); // Reset completed parts for new upload
     setUploadId(null); // Reset upload ID
 
-    // Add a small delay to allow the last chunk to be fully written to IndexedDB
-    await new Promise(r => setTimeout(r, 500));
-
     const chunks = await listChunks(sessionId);
     console.log("handleUpload: Chunks found:", chunks.length);
     if (!chunks.length) {
