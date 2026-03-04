@@ -52,6 +52,10 @@ export default function RecordingRoomPage() {
     let urls: string[] = [];
     try {
       const { urls: signed, uploadId: uId } = await requestUploadUrls(sessionId, parts.length);
+      if (signed.length !== parts.length) {
+        setUploadError(`Upload URL mismatch: expected ${parts.length}, got ${signed.length}.`);
+        return;
+      }
       urls = signed;
       setUploadId(uId); // Ensure we capture the uploadId!
     } catch (err) {
@@ -62,7 +66,7 @@ export default function RecordingRoomPage() {
 
     const uploads = parts.map((blob, idx) => ({
       id: `part-${idx + 1}`,
-      url: urls[idx] ?? urls[0],
+      url: urls[idx],
       blob
     }));
     uploadJobsRef.current = uploads;
@@ -91,6 +95,10 @@ export default function RecordingRoomPage() {
     });
 
   const [completedParts, setCompletedParts] = useState<Array<{ partNumber: number; etag: string }>>([]);
+  const sortedCompletedParts = useMemo(
+    () => [...completedParts].sort((a, b) => a.partNumber - b.partNumber),
+    [completedParts]
+  );
 
   useEffect(() => {
     void startMedia();
@@ -128,13 +136,14 @@ export default function RecordingRoomPage() {
 
   // Watch for all uploads completion
   useEffect(() => {
-    if (uploadItems.length > 0 && completedParts.length === uploadItems.length && uploadId) {
+    const allUploaded = uploadItems.length > 0 && uploadItems.every((item) => item.status === "completed");
+    if (allUploaded && sortedCompletedParts.length === uploadItems.length && uploadId) {
       // All parts uploaded
       const finalize = async () => {
         console.log("All parts uploaded, finalizing...", {
           uploadId,
-          partsCount: completedParts.length,
-          parts: completedParts.sort((a, b) => a.partNumber - b.partNumber)
+          partsCount: sortedCompletedParts.length,
+          parts: sortedCompletedParts
         });
         try {
           const { completeUpload } = await import("@/lib/api/sessions");
@@ -142,7 +151,7 @@ export default function RecordingRoomPage() {
             sessionId,
             {
               uploadId,
-              parts: completedParts.sort((a, b) => a.partNumber - b.partNumber)
+              parts: sortedCompletedParts
             }
           );
           console.log("Upload completed successfully!");
@@ -158,7 +167,7 @@ export default function RecordingRoomPage() {
       };
       void finalize();
     }
-  }, [completedParts.length, uploadItems.length, uploadId, sessionId]);
+  }, [sessionId, sortedCompletedParts, uploadId, uploadItems]);
 
 
   const handleStart = async () => {
