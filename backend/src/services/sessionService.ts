@@ -147,23 +147,21 @@ export class SessionService implements ISessionService {
       const key = `sessions/${sessionId}/${Date.now()}.webm`;
       const { uploadId, urls } = await this.storage.createMultipartUpload({ key, partCount });
 
-      // Update session status if it isn't already uploading
-      if (session.status === SessionStatus.DRAFT || session.status === SessionStatus.LIVE) {
-        await this.sessionRepository.update(sessionId, { 
-          status: SessionStatus.UPLOADING 
+      if (session.status !== SessionStatus.UPLOADING) {
+        await this.sessionRepository.update(sessionId, {
+          status: SessionStatus.UPLOADING
         });
-        
-        // Create upload target
-        const uploadTargetInput: CreateUploadTargetInput = {
-          sessionId,
-          uploadId,
-          key,
-          bucket: env.STORAGE_BUCKET,
-          provider: this.resolveStorageProvider(),
-          expiresAt: new Date(Date.now() + 15 * 60 * 1000)
-        };
-        await this.uploadTargetRepository.create(uploadTargetInput);
       }
+
+      const uploadTargetInput: CreateUploadTargetInput = {
+        sessionId,
+        uploadId,
+        key,
+        bucket: env.STORAGE_BUCKET,
+        provider: this.resolveStorageProvider(),
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000)
+      };
+      await this.uploadTargetRepository.create(uploadTargetInput);
 
       // Create track
       const trackInput: CreateTrackInput = {
@@ -222,13 +220,43 @@ export class SessionService implements ISessionService {
         }, "Session not found for upload completion");
         throw new Error("Session not found");
       }
+
+      const uploadTarget = await this.uploadTargetRepository.findByUploadId(uploadId);
+      if (!uploadTarget) {
+        this.logger.warn({
+          event: "upload_completion_target_missing",
+          sessionId,
+          uploadId
+        }, "Upload target not found for upload completion");
+        throw new Error("Upload target not found");
+      }
+
+      if (uploadTarget.sessionId !== sessionId) {
+        this.logger.warn({
+          event: "upload_completion_target_session_mismatch",
+          sessionId,
+          uploadId,
+          targetSessionId: uploadTarget.sessionId
+        }, "Upload target does not belong to session");
+        throw new Error("Upload target does not belong to session");
+      }
+
+      if (uploadTarget.expiresAt < new Date()) {
+        this.logger.warn({
+          event: "upload_completion_target_expired",
+          sessionId,
+          uploadId,
+          expiresAt: uploadTarget.expiresAt
+        }, "Upload target expired before completion");
+        throw new Error("Upload target expired");
+      }
       
-      const track = session.tracks[0];
+      const track = session.tracks.find((existingTrack) => existingTrack.objectKey === uploadTarget.key);
       if (!track) {
         this.logger.warn({
           event: "upload_completion_track_missing",
           sessionId,
-          uploadId,
+          uploadId
         }, "Track missing for upload completion");
         throw new Error("Track missing for upload completion");
       }
@@ -241,7 +269,7 @@ export class SessionService implements ISessionService {
       }, "Completing S3 multipart upload");
       
       await this.storage.completeMultipartUpload({
-        key: track.objectKey,
+        key: uploadTarget.key,
         uploadId,
         parts: parts ?? []
       });
@@ -259,6 +287,7 @@ export class SessionService implements ISessionService {
       await this.sessionRepository.update(sessionId, { 
         status: SessionStatus.COMPLETE 
       });
+      await this.uploadTargetRepository.delete(uploadTarget.id);
       
       const finalSession = await this.sessionRepository.findByIdWithTracks(sessionId);
       
