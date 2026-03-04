@@ -19,11 +19,25 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
     headers: resolvedHeaders,
     body
   });
+  const contentType = response.headers.get("content-type") ?? "";
 
   if (!response.ok) {
+    if (contentType.includes("application/json")) {
+      const payload = (await response.json()) as { message?: string };
+      throw new Error(payload.message || `Request failed: ${response.status}`);
+    }
     const message = await response.text();
-    throw new Error(message || `Request failed: ${response.status}`);
+    throw new Error(message.trim() || `Request failed: ${response.status}`);
   }
 
-  return response.json() as Promise<T>;
+  if (response.status === 204 || response.status === 205) {
+    return undefined as T;
+  }
+
+  if (contentType.includes("application/json")) {
+    return response.json() as Promise<T>;
+  }
+
+  const text = await response.text();
+  return text as T;
 }
