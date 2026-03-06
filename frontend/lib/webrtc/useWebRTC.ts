@@ -25,7 +25,11 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
 
     const addRemoteStream = useCallback((id: string, stream: MediaStream) => {
         setRemoteParticipants((prev) => {
-            if (prev.find((p) => p.id === id)) return prev;
+            const existing = prev.find((p) => p.id === id);
+            if (existing) {
+                if (existing.stream === stream) return prev;
+                return prev.map((participant) => participant.id === id ? { ...participant, stream } : participant);
+            }
             return [...prev, { id, stream }];
         });
     }, []);
@@ -62,13 +66,15 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
 
         // Handle remote tracks
         pc.ontrack = (event) => {
-            console.log(`Received remote track from ${targetId}`, event.streams[0]);
-            addRemoteStream(targetId, event.streams[0]);
+            const [remoteStream] = event.streams;
+            if (!remoteStream) return;
+            console.log(`Received remote track from ${targetId}`, remoteStream);
+            addRemoteStream(targetId, remoteStream);
         };
 
         pc.onconnectionstatechange = () => {
             console.log(`PC ${targetId} state: ${pc.connectionState}`);
-            if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+            if (pc.connectionState === "disconnected" || pc.connectionState === "failed" || pc.connectionState === "closed") {
                 removeParticipant(targetId);
             }
         };
@@ -123,14 +129,20 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
         createPeerConnection(data.socketId, true);
     }, [createPeerConnection]);
 
+    const handleUserLeft = useCallback((data: { socketId: string }) => {
+        console.log("User left:", data.socketId);
+        removeParticipant(data.socketId);
+    }, [removeParticipant]);
+
     useEffect(() => {
-        if (!sessionId) return;
+        if (!sessionId || !stream) return;
 
         const client = new SignalingClient({ sessionId });
         signaling.current = client;
 
         client.on("connect", () => console.log("WebRTC: connected to signaling"));
         client.on("user-joined", handleUserJoined);
+        client.on("user-left", handleUserLeft);
         client.on("offer", handleOffer);
         client.on("answer", handleAnswer);
         client.on("ice-candidate", handleCandidate);
@@ -141,14 +153,9 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
             client.disconnect();
             peers.current.forEach((pc) => pc.close());
             peers.current.clear();
+            setRemoteParticipants([]);
         };
-    }, [sessionId, handleUserJoined, handleOffer, handleAnswer, handleCandidate]);
-
-    // Update tracks if stream changes
-    useEffect(() => {
-        if (!stream) return;
-        // Track replacement logic to be implemented
-    }, [stream]);
+    }, [sessionId, stream, handleUserJoined, handleUserLeft, handleOffer, handleAnswer, handleCandidate]);
 
     return { remoteParticipants };
 }
