@@ -13,17 +13,22 @@ import { useMediaRecorder } from "@/lib/media/useMediaRecorder";
 import { listChunks, splitBlob, clearChunks } from "@/lib/storage/indexedDb";
 import { UploadWorkerClient, type UploadJob } from "@/lib/upload/workerClient";
 import { requestUploadUrls, startSession } from "@/lib/api/sessions";
+import { getViewerSession, type ViewerSession } from "@/lib/session/viewer";
 import { useWebRTC } from "@/lib/webrtc/useWebRTC";
 
 export default function RecordingRoomPage() {
   const params = useParams<{ sessionId: string }>();
   const sessionId = params.sessionId;
-  const userId = useMemo(() => `user-${sessionId}-host`, [sessionId]);
   const uploadWorker = useRef<UploadWorkerClient | null>(null);
   const uploadJobsRef = useRef<UploadJob[]>([]);
+  const [viewer, setViewer] = useState<ViewerSession | null>(null);
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadId, setUploadId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setViewer(getViewerSession(sessionId));
+  }, [sessionId]);
 
   const { stream, start: startMedia, error: mediaError } = useLocalMedia({ video: true, audio: true });
 
@@ -39,7 +44,12 @@ export default function RecordingRoomPage() {
     setCompletedParts([]); // Reset completed parts for new upload
     setUploadId(null); // Reset upload ID
 
-    const chunks = await listChunks(sessionId);
+    if (!viewer) {
+      setUploadError("Missing participant identity. Rejoin the session before uploading.");
+      return;
+    }
+
+    const chunks = await listChunks(sessionId, viewer.userId);
     console.log("handleUpload: Chunks found:", chunks.length);
     if (!chunks.length) {
       console.warn("handleUpload: No chunks found!");
@@ -87,7 +97,7 @@ export default function RecordingRoomPage() {
     useMediaRecorder({
       stream,
       sessionId,
-      userId,
+      userId: viewer?.userId ?? `unknown-${sessionId}`,
       onStop: () => {
         console.log("Recorder stopped, triggering auto-upload...");
         void handleUpload();
@@ -137,7 +147,7 @@ export default function RecordingRoomPage() {
   // Watch for all uploads completion
   useEffect(() => {
     const allUploaded = uploadItems.length > 0 && uploadItems.every((item) => item.status === "completed");
-    if (allUploaded && sortedCompletedParts.length === uploadItems.length && uploadId) {
+    if (allUploaded && sortedCompletedParts.length === uploadItems.length && uploadId && viewer) {
       // All parts uploaded
       const finalize = async () => {
         console.log("All parts uploaded, finalizing...", {
@@ -156,7 +166,7 @@ export default function RecordingRoomPage() {
           );
           console.log("Upload completed successfully!");
           // Clear local chunks after successful upload
-          await clearChunks(sessionId);
+          await clearChunks(sessionId, viewer.userId);
           setUploadItems([]);
           setCompletedParts([]);
           setUploadId(null);
@@ -167,10 +177,15 @@ export default function RecordingRoomPage() {
       };
       void finalize();
     }
-  }, [sessionId, sortedCompletedParts, uploadId, uploadItems]);
+  }, [sessionId, sortedCompletedParts, uploadId, uploadItems, viewer]);
 
 
   const handleStart = async () => {
+    if (!viewer) {
+      setUploadError("Missing participant identity. Rejoin the session before recording.");
+      return;
+    }
+
     try {
       await startSession(sessionId);
     } catch (err) {
@@ -183,9 +198,9 @@ export default function RecordingRoomPage() {
   const participants: Participant[] = useMemo(
     () => [
       {
-        id: userId,
-        name: "You",
-        role: "host",
+        id: viewer?.userId ?? `viewer-${sessionId}`,
+        name: viewer?.name ?? "You",
+        role: viewer?.role ?? "host",
         stream: stream ?? undefined
       },
       ...remoteParticipants.map((rp) => ({
@@ -195,13 +210,17 @@ export default function RecordingRoomPage() {
         stream: rp.stream
       }))
     ],
-    [stream, userId, remoteParticipants]
+    [remoteParticipants, sessionId, stream, viewer]
   );
 
   // handleUpload moved up
 
   const handleClearLocal = async () => {
-    await clearChunks(sessionId);
+    if (!viewer) {
+      setUploadError("Missing participant identity. Rejoin the session before clearing local chunks.");
+      return;
+    }
+    await clearChunks(sessionId, viewer.userId);
     setUploadItems([]);
   };
 
@@ -246,6 +265,11 @@ export default function RecordingRoomPage() {
 
       {(mediaError || lastError) && (
         <p className="text-sm text-red-200">{mediaError ?? lastError}</p>
+      )}
+      {!viewer && (
+        <p className="text-sm text-amber-200">
+          Participant identity is missing in this browser. Rejoin the session to record and upload safely.
+        </p>
       )}
 
       <div className="grid gap-4 md:grid-cols-2">

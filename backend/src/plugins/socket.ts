@@ -6,11 +6,15 @@ import { SessionRole } from "../models/session.js";
 type TokenPayload = {
     sub: string;
     role: SessionRole;
+    sessionId?: string;
+    name?: string;
 };
 
 type SocketUser = {
     sub: string;
     role: SessionRole;
+    sessionId?: string;
+    name?: string;
 };
 
 type SocketSessionData = {
@@ -73,7 +77,12 @@ export default fp(async (fastify) => {
             if (decodedGuest.role !== SessionRole.Guest) {
                 return next(new Error("Invalid token role"));
             }
-            (socket.data as SocketSessionData).user = { sub: decodedGuest.sub, role: SessionRole.Guest };
+            (socket.data as SocketSessionData).user = {
+                sub: decodedGuest.sub,
+                role: SessionRole.Guest,
+                sessionId: decodedGuest.sessionId ?? decodedGuest.sub,
+                name: decodedGuest.name
+            };
             return next();
         } catch (err) {
             return next(err as Error);
@@ -100,7 +109,7 @@ export default fp(async (fastify) => {
                 if (!user) {
                     throw new Error("Unauthorized");
                 }
-                if (user.role === SessionRole.Guest && user.sub !== sessionId) {
+                if (user.role === SessionRole.Guest && user.sessionId !== sessionId) {
                     throw new Error("Guest token does not match session");
                 }
 

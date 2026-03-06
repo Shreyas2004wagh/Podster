@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TextArea } from "@/components/ui/textarea";
 import { createSession } from "@/lib/api/sessions";
+import { saveViewerSession } from "@/lib/session/viewer";
 
 export default function CreateSessionPage() {
   const [title, setTitle] = useState("");
@@ -21,6 +22,7 @@ export default function CreateSessionPage() {
     setError(null);
     try {
       const result = await createSession({ title });
+      saveViewerSession(result.viewer);
       // We keep notes client-side for now; backend stub does not store them.
       router.push(`/sessions/${result.session.id}/record`);
     } catch (err) {

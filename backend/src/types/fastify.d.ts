@@ -7,6 +7,8 @@ declare module "fastify" {
     user?: {
       sub: string;
       role: SessionRole;
+      sessionId?: string;
+      name?: string;
     };
   }
 }

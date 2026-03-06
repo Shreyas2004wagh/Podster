@@ -192,6 +192,13 @@ type TokenPayload = {
   role: SessionRole;
 };
 
+type AuthenticatedUser = {
+  sub: string;
+  role: SessionRole;
+  sessionId?: string;
+  name?: string;
+};
+
 type SessionParams = {
   id: string;
 };
@@ -214,11 +221,22 @@ export default fp(async (fastify) => {
     try {
       const body = createSessionSchema.parse(request.body);
       const hostId = body.hostId ?? `host-${crypto.randomUUID()}`;
+      const guestId = `guest-${crypto.randomUUID()}`;
       const session = await service.createSession({ title: body.title, hostId });
       const hostToken = fastify.issueHostToken({ hostId });
-      const guestToken = fastify.issueGuestToken({ sessionId: session.id, guestName: "Guest" });
+      const guestToken = fastify.issueGuestToken({ guestId, sessionId: session.id, guestName: "Guest" });
       setAuthCookie(reply, hostToken);
-      reply.code(201).send({ session, hostToken, guestToken });
+      reply.code(201).send({
+        session,
+        hostToken,
+        guestToken,
+        viewer: {
+          userId: hostId,
+          role: SessionRole.Host,
+          name: hostId,
+          sessionId: session.id
+        }
+      });
     } catch (err) {
       request.log.error({ err }, "Failed to create session");
       reply.code(400).send({ message: err instanceof Error ? err.message : "Invalid request" });
@@ -249,9 +267,18 @@ export default fp(async (fastify) => {
         return;
       }
       const body = z.object({ guestName: z.string().min(1) }).parse(request.body);
-      const token = fastify.issueGuestToken({ sessionId, guestName: body.guestName });
+      const guestId = `guest-${crypto.randomUUID()}`;
+      const token = fastify.issueGuestToken({ guestId, sessionId, guestName: body.guestName });
       setAuthCookie(reply, token);
-      reply.send({ token });
+      reply.send({
+        token,
+        viewer: {
+          userId: guestId,
+          role: SessionRole.Guest,
+          name: body.guestName,
+          sessionId
+        }
+      });
     } catch (err) {
       request.log.error({ err }, "Failed to join session");
       reply.code(400).send({ message: err instanceof Error ? err.message : "Invalid request" });
@@ -269,12 +296,12 @@ export default fp(async (fastify) => {
           reply.code(404).send({ message: "Session not found" });
           return;
         }
-        const user = request.user as { sub: string; role: SessionRole } | undefined;
+        const user = request.user as AuthenticatedUser | undefined;
         if (user?.role === SessionRole.Host && user.sub !== session.hostId) {
           reply.code(403).send({ message: "Forbidden" });
           return;
         }
-        if (user?.role === SessionRole.Guest && user.sub !== sessionId) {
+        if (user?.role === SessionRole.Guest && user.sessionId !== sessionId) {
           reply.code(403).send({ message: "Forbidden" });
           return;
         }
@@ -289,7 +316,7 @@ export default fp(async (fastify) => {
 
   fastify.post(
     "/sessions/:id/upload-urls",
-    { preHandler: fastify.authenticateHost },
+    { preHandler: fastify.authenticateAny },
     async (request, reply) => {
       try {
         const sessionId = (request.params as { id: string }).id;
@@ -298,13 +325,21 @@ export default fp(async (fastify) => {
           reply.code(404).send({ message: "Session not found" });
           return;
         }
-        const user = request.user as { sub: string; role: SessionRole } | undefined;
-        if (!user || user.role !== SessionRole.Host || user.sub !== session.hostId) {
+        const user = request.user as AuthenticatedUser | undefined;
+        if (!user) {
+          reply.code(401).send({ message: "Authentication required" });
+          return;
+        }
+        if (user.role === SessionRole.Host && user.sub !== session.hostId) {
+          reply.code(403).send({ message: "Forbidden" });
+          return;
+        }
+        if (user.role === SessionRole.Guest && user.sessionId !== sessionId) {
           reply.code(403).send({ message: "Forbidden" });
           return;
         }
         const body = uploadUrlSchema.parse(request.body);
-        const result = await service.requestUploadUrls(sessionId, body.partCount);
+        const result = await service.requestUploadUrls(sessionId, user.sub, body.partCount);
         reply.send(result);
       } catch (err) {
         request.log.error({ err }, "Failed to request upload URLs");
@@ -315,7 +350,7 @@ export default fp(async (fastify) => {
 
   fastify.post(
     "/sessions/:id/complete-upload",
-    { preHandler: fastify.authenticateHost },
+    { preHandler: fastify.authenticateAny },
     async (request, reply) => {
       try {
         const sessionId = (request.params as { id: string }).id;
@@ -324,13 +359,21 @@ export default fp(async (fastify) => {
           reply.code(404).send({ message: "Session not found" });
           return;
         }
-        const user = request.user as { sub: string; role: SessionRole } | undefined;
-        if (!user || user.role !== SessionRole.Host || user.sub !== existingSession.hostId) {
+        const user = request.user as AuthenticatedUser | undefined;
+        if (!user) {
+          reply.code(401).send({ message: "Authentication required" });
+          return;
+        }
+        if (user.role === SessionRole.Host && user.sub !== existingSession.hostId) {
+          reply.code(403).send({ message: "Forbidden" });
+          return;
+        }
+        if (user.role === SessionRole.Guest && user.sessionId !== sessionId) {
           reply.code(403).send({ message: "Forbidden" });
           return;
         }
         const body = completeUploadSchema.parse(request.body);
-        const updatedSession = await service.completeUpload(sessionId, body.uploadId, body.parts);
+        const updatedSession = await service.completeUpload(sessionId, body.uploadId, body.parts, user.sub);
         reply.send(updatedSession);
       } catch (err) {
         request.log.error({ err }, "Failed to complete upload");
@@ -350,8 +393,8 @@ export default fp(async (fastify) => {
           reply.code(404).send({ message: "Session not found" });
           return;
         }
-        const user = request.user as { sub: string; role: SessionRole } | undefined;
-        if (user?.role === SessionRole.Guest && user.sub !== params.id) {
+        const user = request.user as AuthenticatedUser | undefined;
+        if (user?.role === SessionRole.Guest && user.sessionId !== params.id) {
           reply.code(403).send({ message: "Forbidden" });
           return;
         }
@@ -381,7 +424,7 @@ export default fp(async (fastify) => {
         return;
       }
 
-      const user = request.user as { sub: string; role: SessionRole } | undefined;
+      const user = request.user as AuthenticatedUser | undefined;
       if (!user) {
         reply.code(401).send({ message: "Authentication required" });
         return;
@@ -390,7 +433,7 @@ export default fp(async (fastify) => {
         reply.code(403).send({ message: "Forbidden" });
         return;
       }
-      if (user.role === SessionRole.Guest && user.sub !== sessionId) {
+      if (user.role === SessionRole.Guest && user.sessionId !== sessionId) {
         reply.code(403).send({ message: "Forbidden" });
         return;
       }

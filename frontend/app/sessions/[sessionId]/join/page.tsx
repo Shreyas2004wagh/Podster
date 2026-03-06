@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { joinSession } from "@/lib/api/sessions";
+import { saveViewerSession } from "@/lib/session/viewer";
 
 export default function JoinSessionPage() {
   const params = useParams<{ sessionId: string }>();
@@ -19,7 +20,8 @@ export default function JoinSessionPage() {
     setIsJoining(true);
     setError(null);
     try {
-      await joinSession(params.sessionId, { guestName: name });
+      const result = await joinSession(params.sessionId, { guestName: name });
+      saveViewerSession(result.viewer);
       router.push(`/sessions/${params.sessionId}/record`);
     } catch (err) {
       setError((err as Error).message);

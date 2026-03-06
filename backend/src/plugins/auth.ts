@@ -8,6 +8,7 @@ type TokenPayload = {
   sub: string;
   role: SessionRole;
   name?: string;
+  sessionId?: string;
 };
 
 declare module "fastify" {
@@ -16,7 +17,7 @@ declare module "fastify" {
     authenticateGuest: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
     authenticateAny: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
     issueHostToken: (payload: { hostId: string }) => string;
-    issueGuestToken: (payload: { sessionId: string; guestName: string }) => string;
+    issueGuestToken: (payload: { guestId: string; sessionId: string; guestName: string }) => string;
   }
 }
 
@@ -31,10 +32,11 @@ export const authPlugin = fp(async (fastify) => {
     fastify.jwt.sign({ sub: payload.hostId, role: SessionRole.Host }, { key: env.HOST_JWT_SECRET })
   );
 
-  fastify.decorate("issueGuestToken", (payload: { sessionId: string; guestName: string }) =>
+  fastify.decorate("issueGuestToken", (payload: { guestId: string; sessionId: string; guestName: string }) =>
     fastify.jwt.sign(
       {
-        sub: payload.sessionId,
+        sub: payload.guestId,
+        sessionId: payload.sessionId,
         role: SessionRole.Guest,
         name: payload.guestName
       },
@@ -79,7 +81,12 @@ export const authPlugin = fp(async (fastify) => {
         if (decoded.role !== SessionRole.Guest) {
           throw new Error("Guest token required");
         }
-        request.user = { sub: decoded.sub, role: SessionRole.Guest };
+        request.user = {
+          sub: decoded.sub,
+          role: SessionRole.Guest,
+          sessionId: decoded.sessionId ?? decoded.sub,
+          name: decoded.name
+        };
       } catch (err) {
         reply.code(401).send({ message: "Guest authentication failed", error: String(err) });
       }
@@ -109,7 +116,12 @@ export const authPlugin = fp(async (fastify) => {
         if (decodedGuest.role !== SessionRole.Guest) {
           throw new Error("Invalid token role");
         }
-        request.user = { sub: decodedGuest.sub, role: SessionRole.Guest };
+        request.user = {
+          sub: decodedGuest.sub,
+          role: SessionRole.Guest,
+          sessionId: decodedGuest.sessionId ?? decodedGuest.sub,
+          name: decodedGuest.name
+        };
       } catch (err) {
         reply.code(401).send({ message: "Authentication failed", error: String(err) });
       }

@@ -1,10 +1,17 @@
 import type { Session, SessionId } from "@podster/shared";
 import { apiFetch } from "@/lib/api/client";
+import type { ViewerSession } from "@/lib/session/viewer";
 
 export interface CreateSessionResponse {
   session: Session;
   hostToken: string;
   guestToken: string;
+  viewer: ViewerSession;
+}
+
+export interface JoinSessionResponse {
+  token: string;
+  viewer: ViewerSession;
 }
 
 export async function createSession(input: { title: string }): Promise<CreateSessionResponse> {
@@ -12,7 +19,7 @@ export async function createSession(input: { title: string }): Promise<CreateSes
 }
 
 export async function joinSession(sessionId: SessionId, payload: { guestName: string }) {
-  return apiFetch<{ token: string }>(`/sessions/${sessionId}/join`, {
+  return apiFetch<JoinSessionResponse>(`/sessions/${sessionId}/join`, {
     method: "POST",
     json: payload
   });

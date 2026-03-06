@@ -125,7 +125,7 @@ export class SessionService implements ISessionService {
     }
   }
 
-  async requestUploadUrls(sessionId: SessionId, partCount: number) {
+  async requestUploadUrls(sessionId: SessionId, uploaderId: string, partCount: number) {
     const startTime = Date.now();
     
     try {
@@ -144,7 +144,7 @@ export class SessionService implements ISessionService {
         throw new Error("Session not found");
       }
       
-      const key = `sessions/${sessionId}/${Date.now()}.webm`;
+      const key = `sessions/${sessionId}/${uploaderId}/${Date.now()}.webm`;
       const { uploadId, urls } = await this.storage.createMultipartUpload({ key, partCount });
 
       if (session.status !== SessionStatus.UPLOADING) {
@@ -166,7 +166,7 @@ export class SessionService implements ISessionService {
       // Create track
       const trackInput: CreateTrackInput = {
         sessionId,
-        userId: session.hostId,
+        userId: uploaderId,
         kind: TrackKind.VIDEO,
         objectKey: key
       };
@@ -200,7 +200,7 @@ export class SessionService implements ISessionService {
     }
   }
 
-  async completeUpload(sessionId: SessionId, uploadId: string, parts: UploadedParts) {
+  async completeUpload(sessionId: SessionId, uploadId: string, parts: UploadedParts, uploaderId: string) {
     const startTime = Date.now();
     
     try {
@@ -259,6 +259,17 @@ export class SessionService implements ISessionService {
           uploadId
         }, "Track missing for upload completion");
         throw new Error("Track missing for upload completion");
+      }
+
+      if (track.userId !== uploaderId) {
+        this.logger.warn({
+          event: "upload_completion_user_mismatch",
+          sessionId,
+          uploadId,
+          uploaderId,
+          trackUserId: track.userId
+        }, "Upload target does not belong to the authenticated user");
+        throw new Error("Upload target does not belong to the authenticated user");
       }
       
       this.logger.debug({

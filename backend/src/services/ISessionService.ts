@@ -20,7 +20,7 @@ export interface ISessionService {
   /**
    * Request upload URLs for multipart upload
    */
-  requestUploadUrls(sessionId: SessionId, partCount: number): Promise<{
+  requestUploadUrls(sessionId: SessionId, uploaderId: string, partCount: number): Promise<{
     uploadId: string;
     urls: string[];
     trackId: string;
@@ -38,7 +38,8 @@ export interface ISessionService {
   completeUpload(
     sessionId: SessionId,
     uploadId: string,
-    parts: UploadedParts
+    parts: UploadedParts,
+    uploaderId: string
   ): Promise<Session | null>;
 
   /**

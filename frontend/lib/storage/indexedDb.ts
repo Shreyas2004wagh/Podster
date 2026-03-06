@@ -2,7 +2,7 @@ import { UPLOAD_PART_SIZE_BYTES } from "@podster/shared";
 
 const DB_NAME = "podster-recordings";
 const STORE_NAME = "chunks";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export interface StoredChunk {
   sessionId: string;
@@ -19,9 +19,10 @@ async function getDb(): Promise<IDBDatabase> {
     request.onsuccess = () => resolve(request.result);
     request.onupgradeneeded = () => {
       const db = request.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: ["sessionId", "partNumber"] });
+      if (db.objectStoreNames.contains(STORE_NAME)) {
+        db.deleteObjectStore(STORE_NAME);
       }
+      db.createObjectStore(STORE_NAME, { keyPath: ["sessionId", "userId", "partNumber"] });
     };
   });
 }
@@ -42,29 +43,31 @@ export async function saveChunk(sessionId: string, chunk: Omit<StoredChunk, "ses
   });
 }
 
-export async function listChunks(sessionId: string): Promise<StoredChunk[]> {
+export async function listChunks(sessionId: string, userId: string): Promise<StoredChunk[]> {
   const db = await getDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readonly");
     tx.onerror = () => reject(tx.error);
     const store = tx.objectStore(STORE_NAME);
-    const request = store.getAll(IDBKeyRange.bound([sessionId, 0], [sessionId, Infinity]));
+    const request = store.getAll(IDBKeyRange.bound([sessionId, userId, 0], [sessionId, userId, Infinity]));
     request.onsuccess = () => {
       const items = (request.result as StoredChunk[]).sort((a, b) => a.partNumber - b.partNumber);
-      console.log(`IndexedDB: listed ${items.length} chunks for session ${sessionId}`);
+      console.log(`IndexedDB: listed ${items.length} chunks for session ${sessionId} and user ${userId}`);
       resolve(items);
     };
   });
 }
 
-export async function clearChunks(sessionId: string) {
+export async function clearChunks(sessionId: string, userId: string) {
   const db = await getDb();
   return new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readwrite");
     tx.onerror = () => reject(tx.error);
     tx.oncomplete = () => resolve();
     const store = tx.objectStore(STORE_NAME);
-    const request = store.openCursor(IDBKeyRange.bound([sessionId, 0], [sessionId, Infinity]));
+    const request = store.openCursor(
+      IDBKeyRange.bound([sessionId, userId, 0], [sessionId, userId, Infinity])
+    );
     request.onsuccess = () => {
       const cursor = request.result;
       if (cursor) {
