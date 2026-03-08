@@ -22,15 +22,19 @@ export function useMediaRecorder({
   const [lastError, setLastError] = useState<string | null>(null);
   const partNumber = useRef(0);
   const pendingChunkSaves = useRef<Promise<void>[]>([]);
+  const shouldNotifyOnStop = useRef(false);
 
   const canRecord = useMemo(() => typeof window !== "undefined" && !!MediaRecorder, []);
 
   useEffect(() => {
-    // Clean up recorder if stream changes
-    if (recorderRef.current && recorderRef.current.state !== "inactive") {
-      recorderRef.current.stop();
-    }
-    recorderRef.current = null;
+    return () => {
+      const recorder = recorderRef.current;
+      if (recorder && recorder.state !== "inactive") {
+        shouldNotifyOnStop.current = false;
+        recorder.stop();
+      }
+      recorderRef.current = null;
+    };
   }, [stream]);
 
   const startRecording = useCallback(() => {
@@ -43,6 +47,7 @@ export function useMediaRecorder({
     setLastError(null);
     setIsRecording(true);
     partNumber.current = 0;
+    shouldNotifyOnStop.current = true;
 
     let mimeType = RECORDING_MIME_TYPE;
     if (!MediaRecorder.isTypeSupported(mimeType)) {
@@ -57,6 +62,7 @@ export function useMediaRecorder({
       console.error("Failed to create MediaRecorder:", err);
       setLastError(`Failed to create recorder: ${(err as Error).message}`);
       setIsRecording(false);
+      shouldNotifyOnStop.current = false;
       return;
     }
 
@@ -78,18 +84,23 @@ export function useMediaRecorder({
     };
 
     recorder.onerror = (err) => {
+      shouldNotifyOnStop.current = false;
       setLastError(err.error.message);
       setIsRecording(false);
     };
 
     recorder.onstop = () => {
-      console.log("MediaRecorder stopped. Calling onStop callback...");
+      const notifyOnStop = shouldNotifyOnStop.current;
+      shouldNotifyOnStop.current = false;
+      console.log("MediaRecorder stopped.", { notifyOnStop });
       setIsRecording(false);
       void (async () => {
         await Promise.allSettled(pendingChunkSaves.current);
         pendingChunkSaves.current = [];
         setIsProcessing(false);
-        onStop?.();
+        if (notifyOnStop) {
+          onStop?.();
+        }
       })();
     };
 
@@ -101,6 +112,7 @@ export function useMediaRecorder({
   const stopRecording = useCallback(() => {
     if (recorderRef.current && recorderRef.current.state !== "inactive") {
       setIsProcessing(true);
+      shouldNotifyOnStop.current = true;
       console.log("Stopping recorder...");
       recorderRef.current.requestData(); // Flush final data
       recorderRef.current.stop();
