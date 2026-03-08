@@ -23,7 +23,13 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
         </Badge>
       </div>
       <div className="aspect-video overflow-hidden rounded-xl border border-white/5 bg-black/60">
-        <video ref={videoRef} className="h-full w-full object-cover" autoPlay muted playsInline />
+        <video
+          ref={videoRef}
+          className="h-full w-full object-cover"
+          autoPlay
+          muted={participant.isLocal ?? false}
+          playsInline
+        />
       </div>
       {participant.isSpeaking && (
         <div className="absolute inset-0 pointer-events-none border-2 border-emerald-400/60 rounded-2xl animate-pulse" />

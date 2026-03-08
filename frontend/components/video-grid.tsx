@@ -5,6 +5,7 @@ export interface Participant {
   name: string;
   role: "host" | "guest";
   stream?: MediaStream;
+  isLocal?: boolean;
   isSpeaking?: boolean;
 }
 

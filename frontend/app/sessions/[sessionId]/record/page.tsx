@@ -201,6 +201,7 @@ export default function RecordingRoomPage() {
         id: viewer?.userId ?? `viewer-${sessionId}`,
         name: viewer?.name ?? "You",
         role: viewer?.role ?? "host",
+        isLocal: true,
         stream: stream ?? undefined
       },
       ...remoteParticipants.map((rp) => ({
