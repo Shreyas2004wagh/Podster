@@ -1,5 +1,11 @@
 import Link from "next/link";
-import { type ButtonHTMLAttributes, type PropsWithChildren } from "react";
+import {
+  type ButtonHTMLAttributes,
+  type ComponentProps,
+  type MouseEvent,
+  type MouseEventHandler,
+  type ReactNode
+} from "react";
 import { cn } from "@/lib/utils";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger";
@@ -21,12 +27,33 @@ const sizes: Record<Size, string> = {
   lg: "px-5 py-2.5 text-base rounded-xl"
 };
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface SharedButtonProps {
   variant?: Variant;
   size?: Size;
   loading?: boolean;
-  as?: "button" | "a";
-  href?: string;
+  disabled?: boolean;
+  className?: string;
+  children: ReactNode;
+}
+
+type ButtonAsButtonProps = SharedButtonProps &
+  Omit<ButtonHTMLAttributes<HTMLButtonElement>, keyof SharedButtonProps | "href"> & {
+    as?: "button";
+    href?: never;
+  };
+
+type ButtonAsLinkProps = SharedButtonProps &
+  Omit<ComponentProps<typeof Link>, keyof SharedButtonProps | "href" | "className" | "children" | "onClick"> & {
+    as: "a";
+    href: ComponentProps<typeof Link>["href"];
+    onClick?: MouseEventHandler<HTMLAnchorElement>;
+  };
+
+type ButtonProps = ButtonAsButtonProps | ButtonAsLinkProps;
+
+function preventDisabledLinkNavigation(event: MouseEvent<HTMLAnchorElement>) {
+  event.preventDefault();
+  event.stopPropagation();
 }
 
 export function Button({
@@ -39,7 +66,7 @@ export function Button({
   href,
   children,
   ...rest
-}: PropsWithChildren<ButtonProps>) {
+}: ButtonProps) {
   const sharedClasses = cn(
     "inline-flex items-center justify-center gap-2 font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-black",
     variants[variant],
@@ -49,9 +76,21 @@ export function Button({
   );
 
   if (as === "a") {
+    const isUnavailable = Boolean(disabled || loading);
+    const linkProps = rest as Omit<ButtonAsLinkProps, keyof SharedButtonProps | "as" | "href"> & {
+      onClick?: MouseEventHandler<HTMLAnchorElement>;
+    };
+    const linkHref = href as ComponentProps<typeof Link>["href"];
+
     return (
-      // @ts-ignore - Next.js Link href type issue
-      <Link href={href || "#"} className={sharedClasses}>
+      <Link
+        href={linkHref}
+        aria-disabled={isUnavailable}
+        tabIndex={isUnavailable ? -1 : undefined}
+        onClick={isUnavailable ? preventDisabledLinkNavigation : linkProps.onClick}
+        className={cn(sharedClasses, isUnavailable ? "pointer-events-none" : "")}
+        {...linkProps}
+      >
         {loading && (
           <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/70 border-t-transparent" />
         )}
@@ -64,7 +103,7 @@ export function Button({
     <button
       className={sharedClasses}
       disabled={disabled || loading}
-      {...rest}
+      {...(rest as ButtonHTMLAttributes<HTMLButtonElement>)}
     >
       {loading && (
         <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/70 border-t-transparent" />
