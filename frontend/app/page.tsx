@@ -37,8 +37,8 @@ export default function Home() {
             <Button as="a" href="/sessions/new">
               Create session
             </Button>
-            <Button variant="secondary" as="a" href="/sessions/demo-record">
-              Jump to recording room
+            <Button variant="secondary" as="a" href="/sessions/new">
+              Start host setup
             </Button>
           </div>
         </div>
@@ -54,7 +54,7 @@ export default function Home() {
                 <div>
                   <p className="font-medium text-white">Local recording pipeline</p>
                   <p className="text-slate-300">
-                    MediaRecorder → IndexedDB chunks → upload worker after stop.
+                    MediaRecorder {"->"} IndexedDB chunks {"->"} upload worker after stop.
                   </p>
                 </div>
               </li>
