@@ -37,12 +37,11 @@ export default function RecordingRoomPage() {
     stream: stream ?? null
   });
 
-  // Define handleUpload higher up so useMediaRecorder can call it
   const handleUpload = async () => {
     console.log("handleUpload: Starting upload process...");
     setUploadError(null);
-    setCompletedParts([]); // Reset completed parts for new upload
-    setUploadId(null); // Reset upload ID
+    setCompletedParts([]);
+    setUploadId(null);
 
     if (!viewer) {
       setUploadError("Missing participant identity. Rejoin the session before uploading.");
@@ -61,13 +60,13 @@ export default function RecordingRoomPage() {
     const parts = splitBlob(combined);
     let urls: string[] = [];
     try {
-      const { urls: signed, uploadId: uId } = await requestUploadUrls(sessionId, parts.length);
+      const { urls: signed, uploadId: currentUploadId } = await requestUploadUrls(sessionId, parts.length);
       if (signed.length !== parts.length) {
         setUploadError(`Upload URL mismatch: expected ${parts.length}, got ${signed.length}.`);
         return;
       }
       urls = signed;
-      setUploadId(uId); // Ensure we capture the uploadId!
+      setUploadId(currentUploadId);
     } catch (err) {
       console.error("handleUpload: Failed to get upload URLs", err);
       setUploadError("Failed to get upload URLs from server. Check backend connection and auth.");
@@ -114,24 +113,23 @@ export default function RecordingRoomPage() {
     void startMedia();
     uploadWorker.current = new UploadWorkerClient();
     uploadWorker.current.onMessage((message) => {
-      if (message.type === "pong") return; // Skip pong messages
+      if (message.type === "pong") return;
 
       setUploadItems((prev) =>
         prev.map((item) => {
           if (item.id !== message.id) return item;
           if (message.type === "progress") return { ...item, progress: message.progress, status: "uploading" };
           if (message.type === "completed") {
-            // Store the ETag
             setCompletedParts((prevParts) => {
-              // extract part number from id "part-1" -> 1
               const partNumber = parseInt(message.id.replace("part-", ""), 10);
-              const without = prevParts.filter((p) => p.partNumber !== partNumber);
+              const without = prevParts.filter((part) => part.partNumber !== partNumber);
               return [...without, { partNumber, etag: message.etag }];
             });
             return { ...item, progress: 100, status: "completed" };
           }
-          if (message.type === "error")
+          if (message.type === "error") {
             return { ...item, status: "error", errorMessage: message.message };
+          }
           return item;
         })
       );
@@ -144,11 +142,9 @@ export default function RecordingRoomPage() {
     };
   }, [startMedia]);
 
-  // Watch for all uploads completion
   useEffect(() => {
     const allUploaded = uploadItems.length > 0 && uploadItems.every((item) => item.status === "completed");
     if (allUploaded && sortedCompletedParts.length === uploadItems.length && uploadId && viewer) {
-      // All parts uploaded
       const finalize = async () => {
         console.log("All parts uploaded, finalizing...", {
           uploadId,
@@ -157,15 +153,11 @@ export default function RecordingRoomPage() {
         });
         try {
           const { completeUpload } = await import("@/lib/api/sessions");
-          await completeUpload(
-            sessionId,
-            {
-              uploadId,
-              parts: sortedCompletedParts
-            }
-          );
+          await completeUpload(sessionId, {
+            uploadId,
+            parts: sortedCompletedParts
+          });
           console.log("Upload completed successfully!");
-          // Clear local chunks after successful upload
           await clearChunks(sessionId, viewer.userId);
           setUploadItems([]);
           setCompletedParts([]);
@@ -179,7 +171,6 @@ export default function RecordingRoomPage() {
     }
   }, [sessionId, sortedCompletedParts, uploadId, uploadItems, viewer]);
 
-
   const handleStart = async () => {
     if (!viewer) {
       setUploadError("Missing participant identity. Rejoin the session before recording.");
@@ -191,6 +182,7 @@ export default function RecordingRoomPage() {
     } catch (err) {
       console.error("Failed to mark session live", err);
       setUploadError("Failed to mark session live. Check backend connection and auth.");
+      return;
     }
     startRecording();
   };
@@ -204,17 +196,15 @@ export default function RecordingRoomPage() {
         isLocal: true,
         stream: stream ?? undefined
       },
-      ...remoteParticipants.map((rp) => ({
-        id: rp.id,
-        name: `Guest (${rp.id.slice(0, 4)})`, // improved name later
+      ...remoteParticipants.map((participant) => ({
+        id: participant.id,
+        name: `Guest (${participant.id.slice(0, 4)})`,
         role: "guest" as const,
-        stream: rp.stream
+        stream: participant.stream
       }))
     ],
     [remoteParticipants, sessionId, stream, viewer]
   );
-
-  // handleUpload moved up
 
   const handleClearLocal = async () => {
     if (!viewer) {
@@ -264,9 +254,7 @@ export default function RecordingRoomPage() {
         onSave={handleUpload}
       />
 
-      {(mediaError || lastError) && (
-        <p className="text-sm text-red-200">{mediaError ?? lastError}</p>
-      )}
+      {(mediaError || lastError) && <p className="text-sm text-red-200">{mediaError ?? lastError}</p>}
       {!viewer && (
         <p className="text-sm text-amber-200">
           Participant identity is missing in this browser. Rejoin the session to record and upload safely.
@@ -297,9 +285,9 @@ export default function RecordingRoomPage() {
         <Card>
           <h3 className="text-lg font-semibold text-white">Recording notes</h3>
           <ul className="mt-3 space-y-2 text-sm text-slate-200">
-            <li>• Recording uses local MediaRecorder, not WebRTC streams.</li>
-            <li>• Uploads start only after you stop, via worker parallel PUTs.</li>
-            <li>• IndexedDB keeps chunks so refreshes don’t lose captures.</li>
+            <li>- Recording uses local MediaRecorder, not WebRTC streams.</li>
+            <li>- Uploads start only after you stop, via worker parallel PUTs.</li>
+            <li>- IndexedDB keeps chunks so refreshes do not lose captures.</li>
           </ul>
         </Card>
       </div>
