@@ -15,12 +15,13 @@ export default function JoinSessionPage() {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isJoining, setIsJoining] = useState(false);
+  const trimmedName = name.trim();
 
   const handleJoin = async () => {
     setIsJoining(true);
     setError(null);
     try {
-      const result = await joinSession(params.sessionId, { guestName: name });
+      const result = await joinSession(params.sessionId, { guestName: trimmedName });
       saveViewerSession(result.viewer);
       router.push(`/sessions/${params.sessionId}/record`);
     } catch (err) {
@@ -51,7 +52,7 @@ export default function JoinSessionPage() {
             />
           </div>
           {error && <p className="text-sm text-red-200">{error}</p>}
-          <Button onClick={handleJoin} loading={isJoining} disabled={!name}>
+          <Button onClick={handleJoin} loading={isJoining} disabled={!trimmedName}>
             Join recording room
           </Button>
         </div>

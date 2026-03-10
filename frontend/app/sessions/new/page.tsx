@@ -16,12 +16,13 @@ export default function CreateSessionPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
+  const trimmedTitle = title.trim();
 
   const handleCreate = async () => {
     setIsSubmitting(true);
     setError(null);
     try {
-      const result = await createSession({ title });
+      const result = await createSession({ title: trimmedTitle });
       saveViewerSession(result.viewer);
       // We keep notes client-side for now; backend stub does not store them.
       router.push(`/sessions/${result.session.id}/record`);
@@ -64,7 +65,7 @@ export default function CreateSessionPage() {
             />
           </div>
           {error && <p className="text-sm text-red-200">{error}</p>}
-          <Button onClick={handleCreate} loading={isSubmitting} disabled={!title}>
+          <Button onClick={handleCreate} loading={isSubmitting} disabled={!trimmedTitle}>
             Create and enter room
           </Button>
         </div>
