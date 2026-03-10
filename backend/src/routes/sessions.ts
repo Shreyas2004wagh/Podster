@@ -167,7 +167,7 @@ import {
 } from "../services/errors.js";
 
 const createSessionSchema = z.object({
-  title: z.string().min(1),
+  title: z.string().trim().min(1),
   hostId: z.string().optional()
 });
 
@@ -266,7 +266,7 @@ export default fp(async (fastify) => {
         reply.code(404).send({ message: "Session not found" });
         return;
       }
-      const body = z.object({ guestName: z.string().min(1) }).parse(request.body);
+      const body = z.object({ guestName: z.string().trim().min(1) }).parse(request.body);
       const guestId = `guest-${crypto.randomUUID()}`;
       const token = fastify.issueGuestToken({ guestId, sessionId, guestName: body.guestName });
       setAuthCookie(reply, token);
