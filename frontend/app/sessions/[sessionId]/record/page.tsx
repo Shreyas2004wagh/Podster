@@ -112,6 +112,12 @@ export default function RecordingRoomPage() {
     () => uploadItems.some((item) => item.status === "pending" || item.status === "uploading"),
     [uploadItems]
   );
+  const resetUploadState = () => {
+    setUploadItems([]);
+    setCompletedParts([]);
+    setUploadId(null);
+    setUploadError(null);
+  };
 
   useEffect(() => {
     void startMedia();
@@ -194,6 +200,15 @@ export default function RecordingRoomPage() {
       return;
     }
 
+    try {
+      await clearChunks(sessionId, viewer.userId);
+      resetUploadState();
+    } catch (err) {
+      console.error("Failed to reset local recording state", err);
+      setUploadError("Failed to reset local chunks before recording.");
+      return;
+    }
+
     startRecording();
   };
 
@@ -222,7 +237,7 @@ export default function RecordingRoomPage() {
       return;
     }
     await clearChunks(sessionId, viewer.userId);
-    setUploadItems([]);
+    resetUploadState();
   };
 
   const handleRetryFailed = () => {
