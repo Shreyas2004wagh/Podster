@@ -108,6 +108,10 @@ export default function RecordingRoomPage() {
     () => [...completedParts].sort((a, b) => a.partNumber - b.partNumber),
     [completedParts]
   );
+  const isUploadActive = useMemo(
+    () => uploadItems.some((item) => item.status === "pending" || item.status === "uploading"),
+    [uploadItems]
+  );
 
   useEffect(() => {
     void startMedia();
@@ -172,6 +176,11 @@ export default function RecordingRoomPage() {
   }, [sessionId, sortedCompletedParts, uploadId, uploadItems, viewer]);
 
   const handleStart = async () => {
+    if (isUploadActive) {
+      setUploadError("Wait for the current upload to finish before starting a new recording.");
+      return;
+    }
+
     if (!viewer) {
       setUploadError("Missing participant identity. Rejoin the session before recording.");
       return;
@@ -184,6 +193,7 @@ export default function RecordingRoomPage() {
       setUploadError("Failed to mark session live. Check backend connection and auth.");
       return;
     }
+
     startRecording();
   };
 
@@ -248,6 +258,7 @@ export default function RecordingRoomPage() {
       <RecordingControls
         isRecording={isRecording}
         isProcessing={isProcessing}
+        isUploadActive={isUploadActive}
         durationLabel={durationLabel}
         onStart={handleStart}
         onStop={stopRecording}
@@ -266,10 +277,10 @@ export default function RecordingRoomPage() {
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-white">Upload queue</h3>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={handleRetryFailed}>
+              <Button variant="ghost" size="sm" onClick={handleRetryFailed} disabled={isUploadActive}>
                 Retry failed
               </Button>
-              <Button variant="ghost" size="sm" onClick={handleClearLocal}>
+              <Button variant="ghost" size="sm" onClick={handleClearLocal} disabled={isUploadActive}>
                 Clear local chunks
               </Button>
             </div>

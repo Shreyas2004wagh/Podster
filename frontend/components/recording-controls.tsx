@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 interface RecordingControlsProps {
   isRecording: boolean;
   isProcessing: boolean;
+  isUploadActive: boolean;
   durationLabel: string;
   onStart: () => void;
   onStop: () => void;
@@ -13,6 +14,7 @@ interface RecordingControlsProps {
 export function RecordingControls({
   isRecording,
   isProcessing,
+  isUploadActive,
   durationLabel,
   onStart,
   onStop,
@@ -25,7 +27,7 @@ export function RecordingControls({
       </Badge>
       <span className="text-sm text-slate-200">{durationLabel}</span>
       <div className="flex flex-1 items-center gap-2">
-        <Button onClick={onStart} disabled={isRecording || isProcessing} size="md">
+        <Button onClick={onStart} disabled={isRecording || isProcessing || isUploadActive} size="md">
           Start local recording
         </Button>
         <Button
@@ -39,7 +41,7 @@ export function RecordingControls({
         <Button
           variant="ghost"
           onClick={onSave}
-          disabled={isRecording || isProcessing}
+          disabled={isRecording || isProcessing || isUploadActive}
           size="md"
         >
           Upload chunks
