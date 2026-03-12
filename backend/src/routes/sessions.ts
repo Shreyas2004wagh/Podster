@@ -124,8 +124,6 @@ import type { FastifyReply, FastifyRequest } from "fastify";
  *       properties:
  *         title:
  *           type: string
- *         hostId:
- *           type: string
  *     Session:
  *       type: object
  *       properties:
@@ -167,8 +165,7 @@ import {
 } from "../services/errors.js";
 
 const createSessionSchema = z.object({
-  title: z.string().trim().min(1),
-  hostId: z.string().optional()
+  title: z.string().trim().min(1)
 });
 
 const uploadUrlSchema = z.object({
@@ -220,7 +217,7 @@ export default fp(async (fastify) => {
   fastify.post("/sessions", async (request, reply) => {
     try {
       const body = createSessionSchema.parse(request.body);
-      const hostId = body.hostId ?? `host-${crypto.randomUUID()}`;
+      const hostId = `host-${crypto.randomUUID()}`;
       const guestId = `guest-${crypto.randomUUID()}`;
       const session = await service.createSession({ title: body.title, hostId });
       const hostToken = fastify.issueHostToken({ hostId });
