@@ -64,7 +64,8 @@ export const authPlugin = fp(async (fastify) => {
         }
         request.user = { sub: decoded.sub, role: SessionRole.Host };
       } catch (err) {
-        reply.code(401).send({ message: "Host authentication failed", error: String(err) });
+        request.log.debug({ err }, "Host authentication failed");
+        return reply.code(401).send({ message: "Host authentication failed" });
       }
     }
   );
@@ -88,7 +89,8 @@ export const authPlugin = fp(async (fastify) => {
           name: decoded.name
         };
       } catch (err) {
-        reply.code(401).send({ message: "Guest authentication failed", error: String(err) });
+        request.log.debug({ err }, "Guest authentication failed");
+        return reply.code(401).send({ message: "Guest authentication failed" });
       }
     }
   );
@@ -123,7 +125,8 @@ export const authPlugin = fp(async (fastify) => {
           name: decodedGuest.name
         };
       } catch (err) {
-        reply.code(401).send({ message: "Authentication failed", error: String(err) });
+        request.log.debug({ err }, "Authentication failed");
+        return reply.code(401).send({ message: "Authentication failed" });
       }
     }
   );
