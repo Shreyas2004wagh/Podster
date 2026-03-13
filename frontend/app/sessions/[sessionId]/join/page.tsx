@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { type FormEvent, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -31,6 +31,14 @@ export default function JoinSessionPage() {
     }
   };
 
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!trimmedName || isJoining) {
+      return;
+    }
+    void handleJoin();
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -41,7 +49,7 @@ export default function JoinSessionPage() {
         </p>
       </div>
       <Card>
-        <div className="space-y-4">
+        <form className="space-y-4" onSubmit={handleSubmit}>
           <div className="space-y-2">
             <Label htmlFor="name">Display name</Label>
             <Input
@@ -52,10 +60,10 @@ export default function JoinSessionPage() {
             />
           </div>
           {error && <p className="text-sm text-red-200">{error}</p>}
-          <Button onClick={handleJoin} loading={isJoining} disabled={!trimmedName}>
+          <Button type="submit" loading={isJoining} disabled={!trimmedName}>
             Join recording room
           </Button>
-        </div>
+        </form>
       </Card>
     </div>
   );
