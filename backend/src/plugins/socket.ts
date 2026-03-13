@@ -1,7 +1,9 @@
 import fp from "fastify-plugin";
 import { Server, Socket } from "socket.io";
+import { resolve, TOKENS } from "../container/container.js";
 import { env } from "../config/env.js";
 import { SessionRole } from "../models/session.js";
+import { ISessionService } from "../services/ISessionService.js";
 
 type TokenPayload = {
     sub: string;
@@ -34,6 +36,7 @@ interface SignalingPayload {
 }
 
 export default fp(async (fastify) => {
+    const sessionService = resolve<ISessionService>(TOKENS.SessionService);
     const io = new Server(fastify.server, {
         cors: {
             origin: env.FRONTEND_ORIGIN,
@@ -108,6 +111,13 @@ export default fp(async (fastify) => {
                 const user = sessionData.user;
                 if (!user) {
                     throw new Error("Unauthorized");
+                }
+                const session = await sessionService.getSession(sessionId);
+                if (!session) {
+                    throw new Error("Session not found");
+                }
+                if (user.role === SessionRole.Host && user.sub !== session.hostId) {
+                    throw new Error("Host token does not match session");
                 }
                 if (user.role === SessionRole.Guest && user.sessionId !== sessionId) {
                     throw new Error("Guest token does not match session");
