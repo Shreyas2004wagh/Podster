@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { type FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -33,6 +33,14 @@ export default function CreateSessionPage() {
     }
   };
 
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!trimmedTitle || isSubmitting) {
+      return;
+    }
+    void handleCreate();
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -44,7 +52,7 @@ export default function CreateSessionPage() {
       </div>
 
       <Card>
-        <div className="space-y-4">
+        <form className="space-y-4" onSubmit={handleSubmit}>
           <div className="space-y-2">
             <Label htmlFor="title">Session title</Label>
             <Input
@@ -65,10 +73,10 @@ export default function CreateSessionPage() {
             />
           </div>
           {error && <p className="text-sm text-red-200">{error}</p>}
-          <Button onClick={handleCreate} loading={isSubmitting} disabled={!trimmedTitle}>
+          <Button type="submit" loading={isSubmitting} disabled={!trimmedTitle}>
             Create and enter room
           </Button>
-        </div>
+        </form>
       </Card>
     </div>
   );
