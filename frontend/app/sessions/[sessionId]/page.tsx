@@ -47,7 +47,7 @@ export default function SessionDashboardPage() {
             >
               <div>
                 <p className="font-semibold text-white">
-                  {track.userId} • {track.kind}
+                  {track.userId} - {track.kind}
                 </p>
                 <p className="text-sm text-slate-300">Object key: {track.objectKey}</p>
               </div>
