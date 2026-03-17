@@ -244,6 +244,10 @@ export default function RecordingRoomPage() {
   );
 
   const handleClearLocal = async () => {
+    if (isRecording || isProcessing) {
+      setUploadError("Stop recording and wait for processing to finish before clearing local chunks.");
+      return;
+    }
     if (!viewer) {
       setUploadError("Missing participant identity. Rejoin the session before clearing local chunks.");
       return;
@@ -304,10 +308,20 @@ export default function RecordingRoomPage() {
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-white">Upload queue</h3>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={handleRetryFailed} disabled={isUploadActive}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRetryFailed}
+                disabled={isRecording || isProcessing || isUploadActive}
+              >
                 Retry failed
               </Button>
-              <Button variant="ghost" size="sm" onClick={handleClearLocal} disabled={isUploadActive}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleClearLocal}
+                disabled={isRecording || isProcessing || isUploadActive}
+              >
                 Clear local chunks
               </Button>
             </div>
