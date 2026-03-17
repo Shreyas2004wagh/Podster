@@ -11,6 +11,7 @@ export function useLocalMedia(options: UseLocalMediaOptions = { video: true, aud
   const [isStarting, setIsStarting] = useState(false);
   const lastOptions = useRef(options);
   const streamRef = useRef<MediaStream | null>(null);
+  const startPromiseRef = useRef<Promise<MediaStream | null> | null>(null);
 
   // Helper to safely set stream and ref
   const setStream = (newStream: MediaStream | null) => {
@@ -26,9 +27,13 @@ export function useLocalMedia(options: UseLocalMediaOptions = { video: true, aud
   }, []);
 
   const start = useCallback(async () => {
+    if (startPromiseRef.current) {
+      return startPromiseRef.current;
+    }
+
     setIsStarting(true);
     setError(null);
-    try {
+    startPromiseRef.current = (async () => {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: options.video,
         audio: options.audio
@@ -42,11 +47,18 @@ export function useLocalMedia(options: UseLocalMediaOptions = { video: true, aud
 
       setStream(mediaStream);
       lastOptions.current = options;
+      return mediaStream;
+    })();
+
+    try {
+      return await startPromiseRef.current;
     } catch (err) {
       console.error("useLocalMedia Error:", err);
       setError((err as Error).message);
       setStream(null);
+      return null;
     } finally {
+      startPromiseRef.current = null;
       setIsStarting(false);
     }
   }, [options.audio, options.video]);
