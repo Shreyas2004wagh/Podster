@@ -22,6 +22,7 @@ export default function RecordingRoomPage() {
   const uploadWorker = useRef<UploadWorkerClient | null>(null);
   const uploadJobsRef = useRef<UploadJob[]>([]);
   const preparingUploadRef = useRef(false);
+  const finalizingUploadRef = useRef<string | null>(null);
   const [viewer, setViewer] = useState<ViewerSession | null>(null);
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -49,6 +50,7 @@ export default function RecordingRoomPage() {
     setUploadError(null);
     setCompletedParts([]);
     setUploadId(null);
+    finalizingUploadRef.current = null;
 
     try {
       if (!viewer) {
@@ -122,6 +124,7 @@ export default function RecordingRoomPage() {
     setCompletedParts([]);
     setUploadId(null);
     setUploadError(null);
+    finalizingUploadRef.current = null;
   };
 
   useEffect(() => {
@@ -160,6 +163,11 @@ export default function RecordingRoomPage() {
   useEffect(() => {
     const allUploaded = uploadItems.length > 0 && uploadItems.every((item) => item.status === "completed");
     if (allUploaded && sortedCompletedParts.length === uploadItems.length && uploadId && viewer) {
+      if (finalizingUploadRef.current === uploadId) {
+        return;
+      }
+
+      finalizingUploadRef.current = uploadId;
       const finalize = async () => {
         console.log("All parts uploaded, finalizing...", {
           uploadId,
@@ -174,10 +182,9 @@ export default function RecordingRoomPage() {
           });
           console.log("Upload completed successfully!");
           await clearChunks(sessionId, viewer.userId);
-          setUploadItems([]);
-          setCompletedParts([]);
-          setUploadId(null);
+          resetUploadState();
         } catch (err) {
+          finalizingUploadRef.current = null;
           console.error("Failed to complete upload", err);
           setUploadError(`Failed to finalize upload: ${(err as Error).message}`);
         }
