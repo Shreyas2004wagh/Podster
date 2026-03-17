@@ -8,8 +8,15 @@ interface UseWebRTCOptions {
 
 export interface RemoteParticipant {
     id: string; // Socket ID
+    name: string;
+    role: "host" | "guest";
     stream: MediaStream;
 }
+
+type ParticipantMeta = {
+    name: string;
+    role: "host" | "guest";
+};
 
 const STUN_SERVERS = {
     iceServers: [
@@ -21,21 +28,44 @@ const STUN_SERVERS = {
 export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
     const signaling = useRef<SignalingClient | null>(null);
     const peers = useRef<Map<string, RTCPeerConnection>>(new Map());
+    const participantMeta = useRef<Map<string, ParticipantMeta>>(new Map());
     const [remoteParticipants, setRemoteParticipants] = useState<RemoteParticipant[]>([]);
 
+    const rememberParticipant = useCallback((id: string, meta?: Partial<ParticipantMeta> | null) => {
+        if (!meta) return;
+
+        const current = participantMeta.current.get(id);
+        const next: ParticipantMeta = {
+            name: meta.name?.trim() || current?.name || `Guest (${id.slice(0, 4)})`,
+            role: meta.role ?? current?.role ?? "guest"
+        };
+        participantMeta.current.set(id, next);
+    }, []);
+
+    const getParticipantMeta = useCallback((id: string): ParticipantMeta => {
+        return participantMeta.current.get(id) ?? {
+            name: `Guest (${id.slice(0, 4)})`,
+            role: "guest"
+        };
+    }, []);
+
     const addRemoteStream = useCallback((id: string, stream: MediaStream) => {
+        const meta = getParticipantMeta(id);
         setRemoteParticipants((prev) => {
             const existing = prev.find((p) => p.id === id);
             if (existing) {
                 if (existing.stream === stream) return prev;
-                return prev.map((participant) => participant.id === id ? { ...participant, stream } : participant);
+                return prev.map((participant) =>
+                    participant.id === id ? { ...participant, ...meta, stream } : participant
+                );
             }
-            return [...prev, { id, stream }];
+            return [...prev, { id, ...meta, stream }];
         });
-    }, []);
+    }, [getParticipantMeta]);
 
     const removeParticipant = useCallback((id: string) => {
         setRemoteParticipants((prev) => prev.filter((p) => p.id !== id));
+        participantMeta.current.delete(id);
         const pc = peers.current.get(id);
         if (pc) {
             pc.close();
@@ -95,7 +125,12 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
         return pc;
     }, [stream, addRemoteStream, removeParticipant]);
 
-    const handleOffer = useCallback(async (data: { from: string; offer: RTCSessionDescriptionInit }) => {
+    const handleOffer = useCallback(async (data: {
+        from: string;
+        offer: RTCSessionDescriptionInit;
+        user?: ParticipantMeta;
+    }) => {
+        rememberParticipant(data.from, data.user);
         const pc = createPeerConnection(data.from, false);
         await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
 
@@ -104,30 +139,41 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         signaling.current?.sendAnswer(data.from, answer);
-    }, [createPeerConnection]);
+    }, [createPeerConnection, rememberParticipant]);
 
-    const handleAnswer = useCallback(async (data: { from: string; answer: RTCSessionDescriptionInit }) => {
+    const handleAnswer = useCallback(async (data: {
+        from: string;
+        answer: RTCSessionDescriptionInit;
+        user?: ParticipantMeta;
+    }) => {
+        rememberParticipant(data.from, data.user);
         const pc = peers.current.get(data.from);
         if (pc) {
             await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
         }
-    }, []);
+    }, [rememberParticipant]);
 
-    const handleCandidate = useCallback(async (data: { from: string; candidate: RTCIceCandidateInit }) => {
+    const handleCandidate = useCallback(async (data: {
+        from: string;
+        candidate: RTCIceCandidateInit;
+        user?: ParticipantMeta;
+    }) => {
+        rememberParticipant(data.from, data.user);
         const pc = peers.current.get(data.from);
         if (pc) {
             await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
         }
-    }, []);
+    }, [rememberParticipant]);
 
-    const handleUserJoined = useCallback((data: { socketId: string }) => {
+    const handleUserJoined = useCallback((data: { socketId: string; user?: ParticipantMeta }) => {
         console.log("User joined:", data.socketId);
+        rememberParticipant(data.socketId, data.user);
         // As the host, I'm already here. The new guy (Guest) joined.
         // Or if I'm guest, and Host joins? 
         // Logic: If someone joins, I (existing peer) should initiate connection?
         // Let's say existing peers initiate offers to the new peer.
         createPeerConnection(data.socketId, true);
-    }, [createPeerConnection]);
+    }, [createPeerConnection, rememberParticipant]);
 
     const handleUserLeft = useCallback((data: { socketId: string }) => {
         console.log("User left:", data.socketId);
@@ -153,6 +199,7 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
             client.disconnect();
             peers.current.forEach((pc) => pc.close());
             peers.current.clear();
+            participantMeta.current.clear();
             setRemoteParticipants([]);
         };
     }, [sessionId, stream, handleUserJoined, handleUserLeft, handleOffer, handleAnswer, handleCandidate]);

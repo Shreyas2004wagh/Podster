@@ -35,6 +35,11 @@ interface SignalingPayload {
     [key: string]: unknown;
 }
 
+type SignalingUserPayload = {
+    name: string;
+    role: SessionRole;
+};
+
 export default fp(async (fastify) => {
     const sessionService = resolve<ISessionService>(TOKENS.SessionService);
     const io = new Server(fastify.server, {
@@ -68,7 +73,11 @@ export default fp(async (fastify) => {
                     key: env.HOST_JWT_SECRET
                 });
                 if (decoded.role === SessionRole.Host) {
-                    (socket.data as SocketSessionData).user = { sub: decoded.sub, role: SessionRole.Host };
+                    (socket.data as SocketSessionData).user = {
+                        sub: decoded.sub,
+                        role: SessionRole.Host,
+                        name: decoded.name ?? "Host"
+                    };
                     return next();
                 }
             } catch {
@@ -97,6 +106,18 @@ export default fp(async (fastify) => {
 
         const emitUserLeft = (sessionId: string) => {
             socket.to(sessionId).emit("user-left", { socketId: socket.id });
+        };
+
+        const buildUserPayload = (): SignalingUserPayload | null => {
+            const user = (socket.data as SocketSessionData).user;
+            if (!user) {
+                return null;
+            }
+
+            return {
+                name: user.name ?? (user.role === SessionRole.Host ? "Host" : "Guest"),
+                role: user.role
+            };
         };
 
         // Join a session room
@@ -139,8 +160,8 @@ export default fp(async (fastify) => {
 
                 // Notify others in room
                 socket.to(sessionId).emit("user-joined", {
-                    socketId: socket.id
-                    // In real app, send user metadata (name, role) decoded from token
+                    socketId: socket.id,
+                    user: buildUserPayload()
                 });
 
                 fastify.log.info({ socketId: socket.id, sessionId }, "Joined room");
@@ -188,7 +209,11 @@ export default fp(async (fastify) => {
                 return;
             }
             fastify.log.debug({ event, from: socket.id, to }, "Signal forwarding");
-            socket.to(to).emit(event, { ...rest, from: socket.id });
+            socket.to(to).emit(event, {
+                ...rest,
+                from: socket.id,
+                user: buildUserPayload()
+            });
         };
 
         socket.on("offer", forwardEvent("offer"));
