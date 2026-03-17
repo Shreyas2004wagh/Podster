@@ -16,7 +16,7 @@ declare module "fastify" {
     authenticateHost: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
     authenticateGuest: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
     authenticateAny: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
-    issueHostToken: (payload: { hostId: string }) => string;
+    issueHostToken: (payload: { hostId: string; hostName: string }) => string;
     issueGuestToken: (payload: { guestId: string; sessionId: string; guestName: string }) => string;
   }
 }
@@ -28,8 +28,11 @@ export const authPlugin = fp(async (fastify) => {
     secret: env.HOST_JWT_SECRET
   });
 
-  fastify.decorate("issueHostToken", (payload: { hostId: string }) =>
-    fastify.jwt.sign({ sub: payload.hostId, role: SessionRole.Host }, { key: env.HOST_JWT_SECRET })
+  fastify.decorate("issueHostToken", (payload: { hostId: string; hostName: string }) =>
+    fastify.jwt.sign(
+      { sub: payload.hostId, role: SessionRole.Host, name: payload.hostName },
+      { key: env.HOST_JWT_SECRET }
+    )
   );
 
   fastify.decorate("issueGuestToken", (payload: { guestId: string; sessionId: string; guestName: string }) =>
@@ -62,7 +65,7 @@ export const authPlugin = fp(async (fastify) => {
         if (decoded.role !== SessionRole.Host) {
           throw new Error("Host token required");
         }
-        request.user = { sub: decoded.sub, role: SessionRole.Host };
+        request.user = { sub: decoded.sub, role: SessionRole.Host, name: decoded.name };
       } catch (err) {
         request.log.debug({ err }, "Host authentication failed");
         return reply.code(401).send({ message: "Host authentication failed" });
@@ -106,7 +109,7 @@ export const authPlugin = fp(async (fastify) => {
             key: env.HOST_JWT_SECRET
           });
           if (decoded.role === SessionRole.Host) {
-            request.user = { sub: decoded.sub, role: SessionRole.Host };
+            request.user = { sub: decoded.sub, role: SessionRole.Host, name: decoded.name };
             return;
           }
         } catch {

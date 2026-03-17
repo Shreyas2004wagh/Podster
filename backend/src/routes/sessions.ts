@@ -218,9 +218,10 @@ export default fp(async (fastify) => {
     try {
       const body = createSessionSchema.parse(request.body);
       const hostId = `host-${crypto.randomUUID()}`;
+      const hostName = "Host";
       const guestId = `guest-${crypto.randomUUID()}`;
       const session = await service.createSession({ title: body.title, hostId });
-      const hostToken = fastify.issueHostToken({ hostId });
+      const hostToken = fastify.issueHostToken({ hostId, hostName });
       const guestToken = fastify.issueGuestToken({ guestId, sessionId: session.id, guestName: "Guest" });
       setAuthCookie(reply, hostToken);
       reply.code(201).send({
@@ -230,7 +231,7 @@ export default fp(async (fastify) => {
         viewer: {
           userId: hostId,
           role: SessionRole.Host,
-          name: hostId,
+          name: hostName,
           sessionId: session.id
         }
       });
