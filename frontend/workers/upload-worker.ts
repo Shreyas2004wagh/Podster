@@ -16,6 +16,36 @@ export type UploadWorkerResponse =
 const concurrentUploads = 3;
 const maxRetries = 2;
 
+function uploadChunk(job: { id: string; url: string; blob: Blob }) {
+  return new Promise<string>((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("PUT", job.url);
+
+    request.upload.onprogress = (event) => {
+      if (!event.lengthComputable || event.total === 0) {
+        return;
+      }
+
+      const progress = Math.min(99, Math.round((event.loaded / event.total) * 100));
+      self.postMessage({ type: "progress", id: job.id, progress } satisfies UploadWorkerResponse);
+    };
+
+    request.onerror = () => reject(new Error("Network error during upload"));
+    request.onabort = () => reject(new Error("Upload aborted"));
+    request.onload = () => {
+      if (request.status < 200 || request.status >= 300) {
+        reject(new Error(`Upload failed: ${request.status} ${request.statusText}`));
+        return;
+      }
+
+      const etag = request.getResponseHeader("ETag")?.replace(/"/g, "") || "";
+      resolve(etag);
+    };
+
+    request.send(job.blob);
+  });
+}
+
 self.onmessage = async (event: MessageEvent<UploadWorkerMessage>) => {
   if (event.data.type === "ping") {
     self.postMessage({ type: "pong" } satisfies UploadWorkerResponse);
@@ -31,16 +61,7 @@ self.onmessage = async (event: MessageEvent<UploadWorkerMessage>) => {
         let lastError: Error | null = null;
         while (attempt <= maxRetries) {
           try {
-            const response = await fetch(job.url, {
-              method: "PUT",
-              body: job.blob
-            });
-
-            if (!response.ok) {
-              throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
-            }
-
-            const etag = response.headers.get("ETag")?.replace(/"/g, "") || "";
+            const etag = await uploadChunk(job);
             self.postMessage({ type: "completed", id: job.id, etag } satisfies UploadWorkerResponse);
             return;
           } catch (err) {
