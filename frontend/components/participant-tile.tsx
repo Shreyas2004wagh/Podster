@@ -10,8 +10,21 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    if (!videoRef.current || !participant.stream) return;
-    videoRef.current.srcObject = participant.stream;
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (!participant.stream) {
+      video.srcObject = null;
+      return;
+    }
+
+    video.srcObject = participant.stream;
+
+    return () => {
+      if (video.srcObject === participant.stream) {
+        video.srcObject = null;
+      }
+    };
   }, [participant.stream]);
 
   return (
