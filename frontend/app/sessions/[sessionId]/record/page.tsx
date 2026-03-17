@@ -21,6 +21,7 @@ export default function RecordingRoomPage() {
   const sessionId = params.sessionId;
   const uploadWorker = useRef<UploadWorkerClient | null>(null);
   const uploadJobsRef = useRef<UploadJob[]>([]);
+  const preparingUploadRef = useRef(false);
   const [viewer, setViewer] = useState<ViewerSession | null>(null);
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -38,58 +39,62 @@ export default function RecordingRoomPage() {
   });
 
   const handleUpload = async () => {
+    if (preparingUploadRef.current || isUploadActive) {
+      setUploadError("An upload is already being prepared or is currently running.");
+      return;
+    }
+
+    preparingUploadRef.current = true;
     console.log("handleUpload: Starting upload process...");
     setUploadError(null);
     setCompletedParts([]);
     setUploadId(null);
 
-    if (!viewer) {
-      setUploadError("Missing participant identity. Rejoin the session before uploading.");
-      return;
-    }
-
-    const chunks = await listChunks(sessionId, viewer.userId);
-    console.log("handleUpload: Chunks found:", chunks.length);
-    if (!chunks.length) {
-      console.warn("handleUpload: No chunks found!");
-      setUploadError("No recorded chunks found in IndexedDB.");
-      return;
-    }
-
-    const combined = new Blob(chunks.map((c) => c.blob), { type: chunks[0].blob.type });
-    const parts = splitBlob(combined);
-    let urls: string[] = [];
     try {
+      if (!viewer) {
+        setUploadError("Missing participant identity. Rejoin the session before uploading.");
+        return;
+      }
+
+      const chunks = await listChunks(sessionId, viewer.userId);
+      console.log("handleUpload: Chunks found:", chunks.length);
+      if (!chunks.length) {
+        console.warn("handleUpload: No chunks found!");
+        setUploadError("No recorded chunks found in IndexedDB.");
+        return;
+      }
+
+      const combined = new Blob(chunks.map((c) => c.blob), { type: chunks[0].blob.type });
+      const parts = splitBlob(combined);
       const { urls: signed, uploadId: currentUploadId } = await requestUploadUrls(sessionId, parts.length);
       if (signed.length !== parts.length) {
         setUploadError(`Upload URL mismatch: expected ${parts.length}, got ${signed.length}.`);
         return;
       }
-      urls = signed;
       setUploadId(currentUploadId);
+      const uploads = parts.map((blob, idx) => ({
+        id: `part-${idx + 1}`,
+        url: signed[idx],
+        blob
+      }));
+      uploadJobsRef.current = uploads;
+
+      setUploadItems(
+        uploads.map((upload) => ({
+          id: upload.id,
+          filename: upload.id,
+          progress: 0,
+          status: "pending"
+        }))
+      );
+
+      uploadWorker.current?.upload(uploads);
     } catch (err) {
       console.error("handleUpload: Failed to get upload URLs", err);
       setUploadError("Failed to get upload URLs from server. Check backend connection and auth.");
-      return;
+    } finally {
+      preparingUploadRef.current = false;
     }
-
-    const uploads = parts.map((blob, idx) => ({
-      id: `part-${idx + 1}`,
-      url: urls[idx],
-      blob
-    }));
-    uploadJobsRef.current = uploads;
-
-    setUploadItems(
-      uploads.map((upload) => ({
-        id: upload.id,
-        filename: upload.id,
-        progress: 0,
-        status: "pending"
-      }))
-    );
-
-    uploadWorker.current?.upload(uploads);
   };
 
   const { startRecording, stopRecording, isRecording, isProcessing, durationLabel, lastError } =
