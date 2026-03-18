@@ -37,6 +37,7 @@ export interface CreateUploadTargetInput {
   bucket: string;
   provider: UploadTarget['provider'];
   expiresAt: Date;
+  partCount: number;
 }
 
 // Extended types with relations

@@ -25,6 +25,7 @@ export class PrismaUploadTargetRepository implements IUploadTargetRepository {
         bucket: input.bucket,
         provider: input.provider,
         expiresAt: input.expiresAt,
+        partCount: input.partCount,
       },
     });
   }

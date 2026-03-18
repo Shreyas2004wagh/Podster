@@ -133,6 +133,7 @@ export class PrismaSessionRepository implements ISessionRepository {
         bucket: input.bucket,
         provider: input.provider,
         expiresAt: input.expiresAt,
+        partCount: input.partCount,
       },
     });
   }

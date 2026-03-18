@@ -54,6 +54,7 @@ model UploadTarget {
   bucket    String   @db.VarChar(255)
   provider  StorageProvider
   expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  partCount Int      @map("part_count") @default(0)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   
   // Relations
