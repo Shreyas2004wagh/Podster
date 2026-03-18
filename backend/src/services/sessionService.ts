@@ -22,6 +22,41 @@ import {
 } from "./errors.js";
 
 const RECORDING_URL_TTL_SECONDS = 60 * 60;
+const UPLOAD_TARGET_TTL_SECONDS = RECORDING_URL_TTL_SECONDS;
+
+function normalizeMultipartParts(parts: UploadedParts, expectedPartCount: number): UploadedParts {
+  if (!Number.isInteger(expectedPartCount) || expectedPartCount < 1) {
+    throw new Error("Invalid upload target part count");
+  }
+
+  if (!Array.isArray(parts) || parts.length === 0) {
+    throw new Error("Upload parts are required");
+  }
+
+  if (parts.length !== expectedPartCount) {
+    throw new Error("Upload part count does not match the expected count");
+  }
+
+  const normalizedParts = [...parts].sort((a, b) => a.partNumber - b.partNumber);
+  const seenPartNumbers = new Set<number>();
+
+  normalizedParts.forEach((part, index) => {
+    if (!Number.isInteger(part.partNumber) || part.partNumber < 1 || part.partNumber > expectedPartCount) {
+      throw new Error("Upload part number is invalid");
+    }
+
+    if (seenPartNumbers.has(part.partNumber)) {
+      throw new Error("Upload parts must be unique");
+    }
+    seenPartNumbers.add(part.partNumber);
+
+    if (part.partNumber !== index + 1) {
+      throw new Error("Upload parts must be contiguous and start at 1");
+    }
+  });
+
+  return normalizedParts;
+}
 
 export class SessionService implements ISessionService {
   private readonly logger: ILogger;
@@ -159,7 +194,8 @@ export class SessionService implements ISessionService {
         key,
         bucket: env.STORAGE_BUCKET,
         provider: this.resolveStorageProvider(),
-        expiresAt: new Date(Date.now() + 15 * 60 * 1000)
+        expiresAt: new Date(Date.now() + UPLOAD_TARGET_TTL_SECONDS * 1000),
+        partCount
       };
       await this.uploadTargetRepository.create(uploadTargetInput);
 
@@ -250,7 +286,7 @@ export class SessionService implements ISessionService {
         }, "Upload target expired before completion");
         throw new Error("Upload target expired");
       }
-      
+
       const track = session.tracks.find((existingTrack) => existingTrack.objectKey === uploadTarget.key);
       if (!track) {
         this.logger.warn({
@@ -271,18 +307,20 @@ export class SessionService implements ISessionService {
         }, "Upload target does not belong to the authenticated user");
         throw new Error("Upload target does not belong to the authenticated user");
       }
+
+      const normalizedParts = normalizeMultipartParts(parts ?? [], uploadTarget.partCount);
       
       this.logger.debug({
         event: "s3_multipart_completion_start",
         key: track.objectKey,
         uploadId,
-        partsCount: parts?.length,
+        partsCount: normalizedParts.length,
       }, "Completing S3 multipart upload");
       
       await this.storage.completeMultipartUpload({
         key: uploadTarget.key,
         uploadId,
-        parts: parts ?? []
+        parts: normalizedParts
       });
       
       this.logger.debug({
@@ -292,13 +330,24 @@ export class SessionService implements ISessionService {
       }, "S3 multipart upload completed");
       
       // Mark track as completed
-      await this.trackRepository.markCompleted(track.id, parts ?? []);
-      
-      // Update session status to complete
-      await this.sessionRepository.update(sessionId, { 
-        status: SessionStatus.COMPLETE 
-      });
+      await this.trackRepository.markCompleted(track.id, normalizedParts);
+
       await this.uploadTargetRepository.delete(uploadTarget.id);
+
+      const [incompleteTracks, remainingUploadTargets] = await Promise.all([
+        this.trackRepository.findIncompleteTracks(sessionId),
+        this.uploadTargetRepository.findBySessionId(sessionId)
+      ]);
+
+      if (incompleteTracks.length === 0 && remainingUploadTargets.length === 0) {
+        await this.sessionRepository.update(sessionId, {
+          status: SessionStatus.COMPLETE
+        });
+      } else if (session.status !== SessionStatus.UPLOADING) {
+        await this.sessionRepository.update(sessionId, {
+          status: SessionStatus.UPLOADING
+        });
+      }
       
       const finalSession = await this.sessionRepository.findByIdWithTracks(sessionId);
       

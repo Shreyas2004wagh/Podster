@@ -49,6 +49,7 @@ function createUploadTarget(overrides: Partial<UploadTarget> = {}): UploadTarget
     key: "sessions/session-1/guest-1/track.webm",
     bucket: "podster",
     provider: StorageProvider.S3,
+    partCount: 2,
     expiresAt: new Date("2030-03-17T05:00:00.000Z"),
     createdAt: new Date("2026-03-17T04:00:00.000Z"),
     ...overrides
@@ -130,6 +131,11 @@ function createStorageProviderMock(overrides: Partial<IStorageProvider> = {}): I
     }),
     completeMultipartUpload: async () => undefined,
     getSignedDownloadUrl: async () => "https://example.test/download",
+    checkHealth: async () => ({
+      provider: "s3",
+      bucket: "podster",
+      region: "auto"
+    }),
     ...overrides
   };
 }
@@ -155,17 +161,18 @@ test("requestUploadUrls marks the session as uploading and persists upload metad
   });
   const uploadTargetRepository = createUploadTargetRepositoryMock({
     create: async (input) => {
-      const target = createUploadTarget({
-        sessionId: input.sessionId,
-        uploadId: input.uploadId,
-        key: input.key,
-        bucket: input.bucket,
-        provider: input.provider,
-        expiresAt: input.expiresAt
-      });
-      createdTargets.push(target);
-      return target;
-    }
+        const target = createUploadTarget({
+          sessionId: input.sessionId,
+          uploadId: input.uploadId,
+          key: input.key,
+          bucket: input.bucket,
+          provider: input.provider,
+          partCount: input.partCount,
+          expiresAt: input.expiresAt
+        });
+        createdTargets.push(target);
+        return target;
+      }
   });
 
   const service = new SessionService(
@@ -184,6 +191,8 @@ test("requestUploadUrls marks the session as uploading and persists upload metad
   assert.equal(createdTargets[0]?.sessionId, "session-1");
   assert.equal(createdTracks.length, 1);
   assert.equal(createdTracks[0]?.userId, "guest-1");
+  assert.equal(createdTargets[0]?.partCount, 2);
+  assert.ok(createdTargets[0]!.expiresAt.getTime() - Date.now() >= 59 * 60 * 1000);
 });
 
 test("completeUpload rejects uploads that do not belong to the authenticated user", async () => {
@@ -232,5 +241,72 @@ test("completeUpload rejects upload targets from a different session", async () 
   await assert.rejects(
     service.completeUpload("session-1", "upload-1", [{ partNumber: 1, etag: "etag-1" }], "guest-1"),
     /does not belong to session/
+  );
+});
+
+test("completeUpload keeps session uploading when other tracks remain pending", async () => {
+  const updatedStatuses: SessionStatus[] = [];
+
+  const service = new SessionService(
+    createSessionRepositoryMock({
+      findByIdWithTracks: async () =>
+        Object.assign(createSession({ status: SessionStatus.UPLOADING }), {
+          tracks: [
+            createTrack({ id: "track-1", userId: "guest-1" }),
+            createTrack({ id: "track-2", userId: "guest-2", objectKey: "sessions/session-1/guest-2/track.webm" })
+          ]
+        }),
+      update: async (_id, input) => {
+        updatedStatuses.push(input.status ?? SessionStatus.DRAFT);
+        return createSession({ status: input.status ?? SessionStatus.DRAFT });
+      }
+    }),
+    createTrackRepositoryMock({
+      findIncompleteTracks: async () => [createTrack({ id: "track-2", userId: "guest-2" })]
+    }),
+    createUploadTargetRepositoryMock({
+      findByUploadId: async () => createUploadTarget({ partCount: 1 })
+    }),
+    createStorageProviderMock()
+  );
+
+  const result = await service.completeUpload(
+    "session-1",
+    "upload-1",
+    [{ partNumber: 1, etag: "etag-1" }],
+    "guest-1"
+  );
+
+  assert.equal(updatedStatuses.includes(SessionStatus.COMPLETE), false);
+  assert.equal(updatedStatuses.includes(SessionStatus.UPLOADING), false);
+  assert.equal(result?.status, SessionStatus.UPLOADING);
+});
+
+test("completeUpload rejects malformed multipart part lists", async () => {
+  const service = new SessionService(
+    createSessionRepositoryMock({
+      findByIdWithTracks: async () =>
+        Object.assign(createSession({ status: SessionStatus.UPLOADING }), {
+          tracks: [createTrack({ userId: "guest-1" })]
+        })
+    }),
+    createTrackRepositoryMock(),
+    createUploadTargetRepositoryMock({
+      findByUploadId: async () => createUploadTarget({ partCount: 2 })
+    }),
+    createStorageProviderMock()
+  );
+
+  await assert.rejects(
+    service.completeUpload(
+      "session-1",
+      "upload-1",
+      [
+        { partNumber: 1, etag: "etag-1" },
+        { partNumber: 1, etag: "etag-2" }
+      ],
+      "guest-1"
+    ),
+    /unique|contiguous|count/
   );
 });
