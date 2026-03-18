@@ -12,20 +12,18 @@ import type { FastifyReply, FastifyRequest } from "fastify";
  *         application/json:
  *           schema:
  *             $ref: '#/components/schemas/CreateSession'
- *     responses:
- *       201:
- *         description: Session created
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 session:
- *                   $ref: '#/components/schemas/Session'
- *                 hostToken:
- *                   type: string
- *                 guestToken:
- *                   type: string
+  *     responses:
+  *       201:
+  *         description: Session created
+  *         content:
+  *           application/json:
+  *             schema:
+  *               type: object
+  *               properties:
+  *                 session:
+  *                   $ref: '#/components/schemas/Session'
+  *                 viewer:
+  *                   type: object
  *
  * /sessions/{id}:
  *   get:
@@ -64,16 +62,16 @@ import type { FastifyReply, FastifyRequest } from "fastify";
  *             properties:
  *               guestName:
  *                 type: string
- *     responses:
- *       200:
- *         description: Guest token issued
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 token:
- *                   type: string
+  *     responses:
+  *       200:
+  *         description: Guest joined
+  *         content:
+  *           application/json:
+  *             schema:
+  *               type: object
+  *               properties:
+  *                 viewer:
+  *                   type: object
  *
  * /sessions/{id}/upload-urls:
  *   post:
@@ -173,7 +171,7 @@ const uploadUrlSchema = z.object({
 });
 
 const completeUploadSchema = z.object({
-  uploadId: z.string(),
+  uploadId: z.string().trim().min(1),
   parts: z
     .array(
       z.object({
@@ -200,17 +198,40 @@ type SessionParams = {
   id: string;
 };
 
+function parseJwtTtlToSeconds(value: string): number {
+  const trimmed = value.trim();
+  const match = /^(\d+)([smhd])?$/.exec(trimmed);
+  if (!match) {
+    return 60 * 60 * 8;
+  }
+
+  const amount = Number.parseInt(match[1] ?? "0", 10);
+  const unit = match[2] ?? "s";
+  switch (unit) {
+    case "m":
+      return amount * 60;
+    case "h":
+      return amount * 60 * 60;
+    case "d":
+      return amount * 60 * 60 * 24;
+    case "s":
+    default:
+      return amount;
+  }
+}
+
 export default fp(async (fastify) => {
   // Resolve SessionService from the DI container
   const service = resolve<ISessionService>(TOKENS.SessionService);
   const TOKEN_COOKIE = "podster_token";
 
-  const setAuthCookie = (reply: FastifyReply, token: string) => {
+  const setAuthCookie = (reply: FastifyReply, token: string, maxAge: number) => {
     reply.setCookie(TOKEN_COOKIE, token, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
-      path: "/"
+      path: "/",
+      maxAge
     });
   };
 
@@ -219,15 +240,11 @@ export default fp(async (fastify) => {
       const body = createSessionSchema.parse(request.body);
       const hostId = `host-${crypto.randomUUID()}`;
       const hostName = "Host";
-      const guestId = `guest-${crypto.randomUUID()}`;
       const session = await service.createSession({ title: body.title, hostId });
       const hostToken = fastify.issueHostToken({ hostId, hostName });
-      const guestToken = fastify.issueGuestToken({ guestId, sessionId: session.id, guestName: "Guest" });
-      setAuthCookie(reply, hostToken);
+      setAuthCookie(reply, hostToken, parseJwtTtlToSeconds(env.HOST_JWT_TTL));
       reply.code(201).send({
         session,
-        hostToken,
-        guestToken,
         viewer: {
           userId: hostId,
           role: SessionRole.Host,
@@ -241,12 +258,25 @@ export default fp(async (fastify) => {
     }
   });
 
-  fastify.get("/sessions/:id", async (request, reply) => {
+  fastify.get("/sessions/:id", { preHandler: fastify.authenticateAny }, async (request, reply) => {
     try {
       const sessionId = (request.params as { id: string }).id;
       const session = await service.getSession(sessionId);
       if (!session) {
         reply.code(404).send({ message: "Session not found" });
+        return;
+      }
+      const user = request.user as AuthenticatedUser | undefined;
+      if (!user) {
+        reply.code(401).send({ message: "Authentication required" });
+        return;
+      }
+      if (user.role === SessionRole.Host && user.sub !== session.hostId) {
+        reply.code(403).send({ message: "Forbidden" });
+        return;
+      }
+      if (user.role === SessionRole.Guest && user.sessionId !== sessionId) {
+        reply.code(403).send({ message: "Forbidden" });
         return;
       }
       reply.send(session);
@@ -267,9 +297,8 @@ export default fp(async (fastify) => {
       const body = z.object({ guestName: z.string().trim().min(1) }).parse(request.body);
       const guestId = `guest-${crypto.randomUUID()}`;
       const token = fastify.issueGuestToken({ guestId, sessionId, guestName: body.guestName });
-      setAuthCookie(reply, token);
+      setAuthCookie(reply, token, parseJwtTtlToSeconds(env.GUEST_JWT_TTL));
       reply.send({
-        token,
         viewer: {
           userId: guestId,
           role: SessionRole.Guest,
@@ -285,7 +314,7 @@ export default fp(async (fastify) => {
 
   fastify.post(
     "/sessions/:id/start",
-    { preHandler: fastify.authenticateAny },
+    { preHandler: fastify.authenticateHost },
     async (request, reply) => {
       try {
         const sessionId = (request.params as { id: string }).id;
@@ -295,11 +324,7 @@ export default fp(async (fastify) => {
           return;
         }
         const user = request.user as AuthenticatedUser | undefined;
-        if (user?.role === SessionRole.Host && user.sub !== session.hostId) {
-          reply.code(403).send({ message: "Forbidden" });
-          return;
-        }
-        if (user?.role === SessionRole.Guest && user.sessionId !== sessionId) {
+        if (!user || user.role !== SessionRole.Host || user.sub !== session.hostId) {
           reply.code(403).send({ message: "Forbidden" });
           return;
         }
