@@ -31,7 +31,7 @@ export const authPlugin = fp(async (fastify) => {
   fastify.decorate("issueHostToken", (payload: { hostId: string; hostName: string }) =>
     fastify.jwt.sign(
       { sub: payload.hostId, role: SessionRole.Host, name: payload.hostName },
-      { key: env.HOST_JWT_SECRET }
+      { key: env.HOST_JWT_SECRET, expiresIn: env.HOST_JWT_TTL }
     )
   );
 
@@ -43,7 +43,7 @@ export const authPlugin = fp(async (fastify) => {
         role: SessionRole.Guest,
         name: payload.guestName
       },
-      { key: env.GUEST_JWT_SECRET }
+      { key: env.GUEST_JWT_SECRET, expiresIn: env.GUEST_JWT_TTL }
     )
   );
 
