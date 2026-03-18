@@ -9,6 +9,20 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+      FRONTEND_ORIGIN: http://localhost:3000
+      DATABASE_URL: postgresql://podster:podster@localhost:5432/podster
+      HOST_JWT_SECRET: ci-host-jwt-secret-please-change-1234567890
+      GUEST_JWT_SECRET: ci-guest-jwt-secret-please-change-1234567890
+      COOKIE_SECRET: ci-cookie-secret-please-change-1234567890
+      STORAGE_PROVIDER: s3
+      STORAGE_ENDPOINT: https://example.r2.cloudflarestorage.com
+      STORAGE_REGION: auto
+      STORAGE_ACCESS_KEY: ci-storage-access-key-please-change
+      STORAGE_SECRET_KEY: ci-storage-secret-key-please-change
+      STORAGE_BUCKET: podster-ci
     strategy:
       matrix:
         node-version: [20.x]
@@ -37,4 +51,4 @@ jobs:
       - name: Run frontend tests
         run: pnpm --filter frontend exec playwright test --reporter=dot
       - name: Run backend tests
-        run: pnpm --filter backend test || echo "No backend tests defined"
+        run: pnpm --filter backend test

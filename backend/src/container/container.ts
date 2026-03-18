@@ -65,7 +65,7 @@ export function configureContainer(): void {
   container.registerInstance(TOKENS.SessionService, sessionService);
   
   // Register health service
-  container.registerInstance(TOKENS.HealthService, new HealthService());
+  container.registerInstance(TOKENS.HealthService, new HealthService(container.resolve(TOKENS.StorageProvider)));
 }
 
 /**

@@ -19,8 +19,15 @@ export interface DownloadUrlRequest {
   expiresInSeconds?: number;
 }
 
+export interface StorageHealthInfo {
+  provider: "s3" | "r2" | "local";
+  bucket: string;
+  region: string;
+}
+
 export interface IStorageProvider {
   createMultipartUpload(request: MultipartUploadRequest): Promise<MultipartUploadResponse>;
   completeMultipartUpload(request: CompleteUploadRequest): Promise<void>;
   getSignedDownloadUrl(request: DownloadUrlRequest): Promise<string>;
+  checkHealth(): Promise<StorageHealthInfo>;
 }

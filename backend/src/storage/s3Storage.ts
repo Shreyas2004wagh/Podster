@@ -2,7 +2,8 @@ import {
   S3Client,
   CreateMultipartUploadCommand,
   CompleteMultipartUploadCommand,
-  UploadPartCommand
+  UploadPartCommand,
+  HeadBucketCommand
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env } from "../config/env.js";
@@ -11,6 +12,7 @@ import type {
   DownloadUrlRequest,
   MultipartUploadRequest,
   MultipartUploadResponse,
+  StorageHealthInfo,
   IStorageProvider
 } from "./storageProvider.js";
 import { generatePresignedGetUrl } from "./presign.js";
@@ -91,5 +93,19 @@ export class S3StorageProvider implements IStorageProvider {
       expiresInSeconds: request.expiresInSeconds ?? 900,
       contentType: "video/webm"
     });
+  }
+
+  async checkHealth(): Promise<StorageHealthInfo> {
+    await this.s3.send(
+      new HeadBucketCommand({
+        Bucket: env.STORAGE_BUCKET
+      })
+    );
+
+    return {
+      provider: env.STORAGE_PROVIDER,
+      bucket: env.STORAGE_BUCKET,
+      region: env.STORAGE_REGION
+    };
   }
 }

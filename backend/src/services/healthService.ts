@@ -1,5 +1,6 @@
 import { checkDatabaseConnection } from "../config/database.js";
 import { ILogger, createChildLogger } from "../config/logger.js";
+import type { IStorageProvider } from "../storage/storageProvider.js";
 
 export interface HealthCheck {
   name: string;
@@ -29,7 +30,7 @@ export class HealthService implements IHealthService {
   private readonly logger: ILogger;
   private readonly startTime: number;
 
-  constructor() {
+  constructor(private readonly storage: IStorageProvider) {
     this.logger = createChildLogger({ service: "HealthService" });
     this.startTime = Date.now();
   }
@@ -134,18 +135,14 @@ export class HealthService implements IHealthService {
     const startTime = Date.now();
     
     try {
-      // Simple check - just return healthy if we can instantiate the storage provider
-      // In a real implementation, you might want to test actual S3 connectivity
+      const storageInfo = await this.storage.checkHealth();
       const responseTime = Date.now() - startTime;
       
       return {
         name: "storage",
         status: "healthy",
         responseTime,
-        metadata: {
-          provider: "s3",
-          region: process.env.STORAGE_REGION || "unknown",
-        },
+        metadata: { ...storageInfo },
       };
     } catch (error) {
       const responseTime = Date.now() - startTime;
@@ -161,9 +158,9 @@ export class HealthService implements IHealthService {
   async isReady(): Promise<boolean> {
     try {
       const health = await this.checkHealth();
-      // Ready if database is healthy (storage can be degraded)
-      const databaseCheck = health.checks.find(check => check.name === "database");
-      return databaseCheck?.status === "healthy";
+      const databaseCheck = health.checks.find((check) => check.name === "database");
+      const storageCheck = health.checks.find((check) => check.name === "storage");
+      return databaseCheck?.status === "healthy" && storageCheck?.status === "healthy";
     } catch (error) {
       this.logger.error({
         event: "readiness_check_failed",
