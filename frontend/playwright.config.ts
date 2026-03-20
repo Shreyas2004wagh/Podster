@@ -5,13 +5,13 @@ export default defineConfig({
   timeout: 30 * 1000,
   retries: 0,
   webServer: {
-    command: 'pnpm exec next dev -p 3000',
-    url: 'http://localhost:3000',
+    command: 'pnpm run dev:test',
+    url: 'http://localhost:3100',
     timeout: 120 * 1000,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
   },
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: 'http://localhost:3100',
     trace: 'on-first-retry',
     ...devices['Desktop Chrome'],
   },
