@@ -11,6 +11,7 @@ import { saveViewerSession } from "@/lib/session/viewer";
 
 export default function JoinSessionPage() {
   const params = useParams<{ sessionId: string }>();
+  const sessionId = params?.sessionId ?? "";
   const router = useRouter();
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -21,9 +22,13 @@ export default function JoinSessionPage() {
     setIsJoining(true);
     setError(null);
     try {
-      const result = await joinSession(params.sessionId, { guestName: trimmedName });
+      if (!sessionId) {
+        throw new Error("Missing session id");
+      }
+
+      const result = await joinSession(sessionId, { guestName: trimmedName });
       saveViewerSession(result.viewer);
-      router.push(`/sessions/${params.sessionId}/record`);
+      router.push(`/sessions/${sessionId}/record`);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -43,7 +48,7 @@ export default function JoinSessionPage() {
     <div className="space-y-6">
       <div>
         <p className="text-sm uppercase tracking-wide text-slate-300">Guest</p>
-        <h1 className="text-3xl font-semibold text-white">Join session {params.sessionId}</h1>
+        <h1 className="text-3xl font-semibold text-white">Join session {sessionId}</h1>
         <p className="text-slate-300">
           Provide your name to receive a signed guest token. Recording still happens locally.
         </p>

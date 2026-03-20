@@ -4,13 +4,10 @@ import type { ViewerSession } from "@/lib/session/viewer";
 
 export interface CreateSessionResponse {
   session: Session;
-  hostToken: string;
-  guestToken: string;
   viewer: ViewerSession;
 }
 
 export interface JoinSessionResponse {
-  token: string;
   viewer: ViewerSession;
 }
 

@@ -10,22 +10,24 @@ import { getDownloadUrl, getSession } from "@/lib/api/sessions";
 
 export default function SessionDashboardPage() {
   const params = useParams<{ sessionId: string }>();
+  const sessionId = params?.sessionId ?? "";
   const [session, setSession] = useState<Session | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
   useEffect(() => {
-    getSession(params.sessionId)
+    if (!sessionId) return;
+    getSession(sessionId)
       .then(setSession)
       .catch((err) => setError((err as Error).message));
-  }, [params.sessionId]);
+  }, [sessionId]);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm uppercase tracking-wide text-slate-300">Session</p>
-          <h1 className="text-3xl font-semibold text-white">Dashboard {params.sessionId}</h1>
+          <h1 className="text-3xl font-semibold text-white">Dashboard {sessionId}</h1>
           <p className="text-slate-300">Review tracks and download completed uploads.</p>
         </div>
         <Badge>{session?.status ?? "loading"}</Badge>
@@ -62,7 +64,7 @@ export default function SessionDashboardPage() {
                   onClick={async () => {
                     try {
                       setDownloadError(null);
-                      const result = await getDownloadUrl(params.sessionId, track.id);
+                      const result = await getDownloadUrl(sessionId, track.id);
                       window.open(result.url, "_blank", "noopener,noreferrer");
                     } catch (err) {
                       setDownloadError((err as Error).message);
