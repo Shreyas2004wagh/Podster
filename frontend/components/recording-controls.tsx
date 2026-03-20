@@ -5,6 +5,9 @@ interface RecordingControlsProps {
   isRecording: boolean;
   isProcessing: boolean;
   isUploadActive: boolean;
+  canStartRecording: boolean;
+  startLabel: string;
+  helperText?: string;
   durationLabel: string;
   onStart: () => void;
   onStop: () => void;
@@ -15,6 +18,9 @@ export function RecordingControls({
   isRecording,
   isProcessing,
   isUploadActive,
+  canStartRecording,
+  startLabel,
+  helperText,
   durationLabel,
   onStart,
   onStop,
@@ -27,8 +33,12 @@ export function RecordingControls({
       </Badge>
       <span className="text-sm text-slate-200">{durationLabel}</span>
       <div className="flex flex-1 items-center gap-2">
-        <Button onClick={onStart} disabled={isRecording || isProcessing || isUploadActive} size="md">
-          Start local recording
+        <Button
+          onClick={onStart}
+          disabled={!canStartRecording || isRecording || isProcessing || isUploadActive}
+          size="md"
+        >
+          {startLabel}
         </Button>
         <Button
           variant="secondary"
@@ -43,10 +53,13 @@ export function RecordingControls({
           onClick={onSave}
           disabled={isRecording || isProcessing || isUploadActive}
           size="md"
-        >
+          >
           Upload chunks
         </Button>
       </div>
+      {helperText && (
+        <p className="w-full text-xs text-amber-200">{helperText}</p>
+      )}
     </div>
   );
 }

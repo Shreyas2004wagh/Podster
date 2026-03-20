@@ -10,7 +10,7 @@ import { RecordingControls } from "@/components/recording-controls";
 import { UploadProgress, type UploadItem } from "@/components/upload-progress";
 import { useLocalMedia } from "@/lib/media/useLocalMedia";
 import { useMediaRecorder } from "@/lib/media/useMediaRecorder";
-import { listChunks, splitBlob, clearChunks } from "@/lib/storage/indexedDb";
+import { buildUploadParts, listChunks, clearChunks } from "@/lib/storage/indexedDb";
 import { UploadWorkerClient, type UploadJob } from "@/lib/upload/workerClient";
 import { requestUploadUrls, startSession } from "@/lib/api/sessions";
 import { getViewerSession, type ViewerSession } from "@/lib/session/viewer";
@@ -18,7 +18,7 @@ import { useWebRTC } from "@/lib/webrtc/useWebRTC";
 
 export default function RecordingRoomPage() {
   const params = useParams<{ sessionId: string }>();
-  const sessionId = params.sessionId;
+  const sessionId = params?.sessionId ?? "";
   const uploadWorker = useRef<UploadWorkerClient | null>(null);
   const uploadJobsRef = useRef<UploadJob[]>([]);
   const preparingUploadRef = useRef(false);
@@ -29,6 +29,10 @@ export default function RecordingRoomPage() {
   const [uploadId, setUploadId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!sessionId) {
+      return;
+    }
+
     setViewer(getViewerSession(sessionId));
   }, [sessionId]);
 
@@ -38,6 +42,8 @@ export default function RecordingRoomPage() {
     sessionId,
     stream: stream ?? null
   });
+
+  const isHost = viewer?.role === "host";
 
   const handleUpload = async () => {
     if (preparingUploadRef.current || isUploadActive) {
@@ -57,24 +63,34 @@ export default function RecordingRoomPage() {
         setUploadError("Missing participant identity. Rejoin the session before uploading.");
         return;
       }
+      if (!sessionId) {
+        setUploadError("Missing session id.");
+        return;
+      }
+
+      if (lastError) {
+        setUploadError(lastError);
+        return;
+      }
 
       const chunks = await listChunks(sessionId, viewer.userId);
-      console.log("handleUpload: Chunks found:", chunks.length);
       if (!chunks.length) {
-        console.warn("handleUpload: No chunks found!");
         setUploadError("No recorded chunks found in IndexedDB.");
         return;
       }
 
-      const combined = new Blob(chunks.map((c) => c.blob), { type: chunks[0].blob.type });
-      const parts = splitBlob(combined);
-      const { urls: signed, uploadId: currentUploadId } = await requestUploadUrls(sessionId, parts.length);
-      if (signed.length !== parts.length) {
-        setUploadError(`Upload URL mismatch: expected ${parts.length}, got ${signed.length}.`);
+      const uploadParts = buildUploadParts(chunks);
+      const { urls: signed, uploadId: currentUploadId } = await requestUploadUrls(
+        sessionId,
+        uploadParts.length
+      );
+      if (signed.length !== uploadParts.length) {
+        setUploadError(`Upload URL mismatch: expected ${uploadParts.length}, got ${signed.length}.`);
         return;
       }
+
       setUploadId(currentUploadId);
-      const uploads = parts.map((blob, idx) => ({
+      const uploads = uploadParts.map((blob, idx) => ({
         id: `part-${idx + 1}`,
         url: signed[idx],
         blob
@@ -92,8 +108,7 @@ export default function RecordingRoomPage() {
 
       uploadWorker.current?.upload(uploads);
     } catch (err) {
-      console.error("handleUpload: Failed to get upload URLs", err);
-      setUploadError("Failed to get upload URLs from server. Check backend connection and auth.");
+      setUploadError((err as Error).message || "Failed to get upload URLs from server.");
     } finally {
       preparingUploadRef.current = false;
     }
@@ -204,24 +219,31 @@ export default function RecordingRoomPage() {
       return;
     }
 
-    try {
-      await startSession(sessionId);
-    } catch (err) {
-      console.error("Failed to mark session live", err);
-      setUploadError("Failed to mark session live. Check backend connection and auth.");
+    const started = startRecording();
+    if (!started) {
       return;
+    }
+
+    if (viewer.role === "host") {
+      try {
+        await startSession(sessionId);
+      } catch (err) {
+        console.error("Failed to mark session live", err);
+        setUploadError("Failed to mark session live. Check backend connection and auth.");
+        stopRecording(false);
+        return;
+      }
     }
 
     try {
       await clearChunks(sessionId, viewer.userId);
-      resetUploadState();
     } catch (err) {
-      console.error("Failed to reset local recording state", err);
       setUploadError("Failed to reset local chunks before recording.");
+      stopRecording(false);
       return;
     }
 
-    startRecording();
+    resetUploadState();
   };
 
   const participants: Participant[] = useMemo(
@@ -235,8 +257,8 @@ export default function RecordingRoomPage() {
       },
       ...remoteParticipants.map((participant) => ({
         id: participant.id,
-        name: `Guest (${participant.id.slice(0, 4)})`,
-        role: "guest" as const,
+        name: participant.name,
+        role: participant.role,
         stream: participant.stream
       }))
     ],
@@ -290,6 +312,15 @@ export default function RecordingRoomPage() {
         isRecording={isRecording}
         isProcessing={isProcessing}
         isUploadActive={isUploadActive}
+        canStartRecording={Boolean(viewer && sessionId)}
+        startLabel={isHost ? "Start session and record" : "Start local recording"}
+        helperText={
+          viewer
+            ? isHost
+              ? undefined
+              : "Guests can record locally after joining, but only the host can start the session live."
+            : "Rejoin the session before recording."
+        }
         durationLabel={durationLabel}
         onStart={handleStart}
         onStop={stopRecording}
