@@ -2,7 +2,7 @@ import { UPLOAD_PART_SIZE_BYTES } from "@podster/shared";
 
 const DB_NAME = "podster-recordings";
 const STORE_NAME = "chunks";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 export interface StoredChunk {
   sessionId: string;
@@ -19,10 +19,9 @@ async function getDb(): Promise<IDBDatabase> {
     request.onsuccess = () => resolve(request.result);
     request.onupgradeneeded = () => {
       const db = request.result;
-      if (db.objectStoreNames.contains(STORE_NAME)) {
-        db.deleteObjectStore(STORE_NAME);
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: ["sessionId", "userId", "partNumber"] });
       }
-      db.createObjectStore(STORE_NAME, { keyPath: ["sessionId", "userId", "partNumber"] });
     };
   });
 }
@@ -78,12 +77,27 @@ export async function clearChunks(sessionId: string, userId: string) {
   });
 }
 
-export function splitBlob(blob: Blob, size = UPLOAD_PART_SIZE_BYTES): Blob[] {
+export function buildUploadParts(chunks: StoredChunk[], size = UPLOAD_PART_SIZE_BYTES): Blob[] {
   const parts: Blob[] = [];
-  let offset = 0;
-  while (offset < blob.size) {
-    parts.push(blob.slice(offset, offset + size));
-    offset += size;
+  let currentPart: Blob[] = [];
+  let currentSize = 0;
+
+  for (const chunk of chunks) {
+    const chunkSize = chunk.blob.size;
+
+    if (currentPart.length > 0 && currentSize + chunkSize > size) {
+      parts.push(new Blob(currentPart, { type: currentPart[0]?.type || chunk.blob.type }));
+      currentPart = [];
+      currentSize = 0;
+    }
+
+    currentPart.push(chunk.blob);
+    currentSize += chunkSize;
   }
+
+  if (currentPart.length > 0) {
+    parts.push(new Blob(currentPart, { type: currentPart[0]?.type || "video/webm" }));
+  }
+
   return parts;
 }

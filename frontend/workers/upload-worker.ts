@@ -38,7 +38,12 @@ function uploadChunk(job: { id: string; url: string; blob: Blob }) {
         return;
       }
 
-      const etag = request.getResponseHeader("ETag")?.replace(/"/g, "") || "";
+      const etag = request.getResponseHeader("ETag")?.replace(/"/g, "");
+      if (!etag) {
+        reject(new Error("Upload succeeded but the response did not include an ETag"));
+        return;
+      }
+
       resolve(etag);
     };
 

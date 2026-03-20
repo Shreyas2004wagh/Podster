@@ -23,6 +23,7 @@ export function useMediaRecorder({
   const partNumber = useRef(0);
   const pendingChunkSaves = useRef<Promise<void>[]>([]);
   const shouldNotifyOnStop = useRef(false);
+  const hasChunkPersistenceFailure = useRef(false);
 
   const canRecord = useMemo(() => typeof window !== "undefined" && !!MediaRecorder, []);
 
@@ -38,44 +39,53 @@ export function useMediaRecorder({
   }, [stream]);
 
   const startRecording = useCallback(() => {
-    console.log("startRecording called. Stream:", !!stream, "active:", stream?.active, "canRecord:", canRecord);
     if (!stream || !canRecord) {
-      console.warn("Cannot start recording: stream or support missing");
       setLastError("Recording not available in this browser or stream not ready.");
-      return;
+      return false;
     }
+
     setLastError(null);
-    setIsRecording(true);
     partNumber.current = 0;
+    pendingChunkSaves.current = [];
+    hasChunkPersistenceFailure.current = false;
     shouldNotifyOnStop.current = true;
 
     let mimeType = RECORDING_MIME_TYPE;
     if (!MediaRecorder.isTypeSupported(mimeType)) {
-      console.warn(`MIME type ${mimeType} not supported. Falling back to default.`);
-      mimeType = ""; // Let browser choose default
+      mimeType = "";
     }
 
     let recorder: MediaRecorder;
     try {
       recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
     } catch (err) {
-      console.error("Failed to create MediaRecorder:", err);
       setLastError(`Failed to create recorder: ${(err as Error).message}`);
-      setIsRecording(false);
       shouldNotifyOnStop.current = false;
-      return;
+      return false;
     }
 
     recorderRef.current = recorder;
 
     recorder.ondataavailable = async (event: BlobEvent) => {
       if (!event.data || event.data.size === 0) return;
-      partNumber.current += 1;
+      const nextPartNumber = partNumber.current + 1;
+      partNumber.current = nextPartNumber;
       const savePromise = saveChunk(sessionId, {
-        partNumber: partNumber.current,
+        partNumber: nextPartNumber,
         blob: event.data,
         createdAt: Date.now(),
         userId
+      }).catch((error) => {
+        hasChunkPersistenceFailure.current = true;
+        const message =
+          error instanceof Error ? error.message : "Failed to persist a recording chunk.";
+        setLastError(message);
+        const activeRecorder = recorderRef.current;
+        if (activeRecorder && activeRecorder.state === "recording") {
+          shouldNotifyOnStop.current = false;
+          activeRecorder.stop();
+        }
+        throw error;
       });
       pendingChunkSaves.current.push(savePromise);
       void savePromise.finally(() => {
@@ -86,37 +96,54 @@ export function useMediaRecorder({
     recorder.onerror = (err) => {
       shouldNotifyOnStop.current = false;
       setLastError(err.error.message);
-      setIsRecording(false);
     };
 
     recorder.onstop = () => {
       const notifyOnStop = shouldNotifyOnStop.current;
       shouldNotifyOnStop.current = false;
-      console.log("MediaRecorder stopped.", { notifyOnStop });
-      setIsRecording(false);
       void (async () => {
-        await Promise.allSettled(pendingChunkSaves.current);
+        const results = await Promise.allSettled(pendingChunkSaves.current);
         pendingChunkSaves.current = [];
+        const hadPersistenceFailure =
+          hasChunkPersistenceFailure.current ||
+          results.some((result) => result.status === "rejected");
+        hasChunkPersistenceFailure.current = hadPersistenceFailure;
+        setIsRecording(false);
         setIsProcessing(false);
+        if (hadPersistenceFailure) {
+          setLastError("A recording chunk failed to persist locally. Upload was cancelled.");
+          return;
+        }
         if (notifyOnStop) {
           onStop?.();
         }
       })();
     };
 
+    try {
+      recorder.start(1000);
+    } catch (err) {
+      recorderRef.current = null;
+      shouldNotifyOnStop.current = false;
+      setLastError(`Failed to start recorder: ${(err as Error).message}`);
+      return false;
+    }
+
     setStartedAt(Date.now());
-    recorder.start(1000); // slice every second; persistence handled in IndexedDB
+    setIsRecording(true);
     setIsProcessing(false);
+    return true;
   }, [canRecord, onStop, sessionId, stream, userId]);
 
-  const stopRecording = useCallback(() => {
+  const stopRecording = useCallback((notifyOnStop = true) => {
     if (recorderRef.current && recorderRef.current.state !== "inactive") {
       setIsProcessing(true);
-      shouldNotifyOnStop.current = true;
-      console.log("Stopping recorder...");
-      recorderRef.current.requestData(); // Flush final data
+      shouldNotifyOnStop.current = notifyOnStop;
+      recorderRef.current.requestData();
       recorderRef.current.stop();
+      return true;
     }
+    return false;
   }, []);
 
   const [now, setNow] = useState(Date.now());
