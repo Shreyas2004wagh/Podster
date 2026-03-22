@@ -178,6 +178,39 @@ export class SessionService implements ISessionService {
         }, "Session not found for upload request");
         throw new Error("Session not found");
       }
+
+      const [existingUploadTargets, incompleteTracks] = await Promise.all([
+        this.uploadTargetRepository.findBySessionId(sessionId),
+        this.trackRepository.findIncompleteTracks(sessionId)
+      ]);
+
+      const incompleteTracksForUploader = incompleteTracks.filter((track) => track.userId === uploaderId);
+      const staleTrackKeys = new Set(incompleteTracksForUploader.map((track) => track.objectKey));
+      const now = new Date();
+      const activeUploadTarget = existingUploadTargets.find(
+        (target) => staleTrackKeys.has(target.key) && target.expiresAt > now
+      );
+
+      if (activeUploadTarget) {
+        this.logger.warn(
+          {
+            event: "upload_request_duplicate_active_upload",
+            sessionId,
+            uploaderId,
+            uploadId: activeUploadTarget.uploadId
+          },
+          "Upload request rejected because an active upload already exists for this participant"
+        );
+        throw new Error("An upload is already in progress for this participant");
+      }
+
+      const staleUploadTargets = existingUploadTargets.filter((target) => staleTrackKeys.has(target.key));
+      if (staleUploadTargets.length > 0 || incompleteTracksForUploader.length > 0) {
+        await Promise.all([
+          ...staleUploadTargets.map((target) => this.uploadTargetRepository.delete(target.id)),
+          ...incompleteTracksForUploader.map((track) => this.trackRepository.delete(track.id))
+        ]);
+      }
       
       const key = `sessions/${sessionId}/${uploaderId}/${Date.now()}.webm`;
       const { uploadId, urls } = await this.storage.createMultipartUpload({ key, partCount });

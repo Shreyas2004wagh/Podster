@@ -195,6 +195,98 @@ test("requestUploadUrls marks the session as uploading and persists upload metad
   assert.ok(createdTargets[0]!.expiresAt.getTime() - Date.now() >= 59 * 60 * 1000);
 });
 
+test("requestUploadUrls rejects duplicate active uploads for the same participant", async () => {
+  let storageCalled = false;
+
+  const service = new SessionService(
+    createSessionRepositoryMock({
+      findById: async () => createSession()
+    }),
+    createTrackRepositoryMock({
+      findIncompleteTracks: async () => [createTrack({ userId: "guest-1" })]
+    }),
+    createUploadTargetRepositoryMock({
+      findBySessionId: async () => [
+        createUploadTarget({
+          key: "sessions/session-1/guest-1/track.webm",
+          expiresAt: new Date("2030-03-17T05:00:00.000Z")
+        })
+      ]
+    }),
+    createStorageProviderMock({
+      createMultipartUpload: async () => {
+        storageCalled = true;
+        return {
+          uploadId: "upload-2",
+          urls: ["https://example.test/part-1"]
+        };
+      }
+    })
+  );
+
+  await assert.rejects(
+    service.requestUploadUrls("session-1", "guest-1", 1),
+    /already in progress/
+  );
+  assert.equal(storageCalled, false);
+});
+
+test("requestUploadUrls clears stale incomplete uploads before creating a fresh target", async () => {
+  const deletedTrackIds: string[] = [];
+  const deletedTargetIds: string[] = [];
+
+  const service = new SessionService(
+    createSessionRepositoryMock({
+      findById: async () => createSession()
+    }),
+    createTrackRepositoryMock({
+      findIncompleteTracks: async () => [
+        createTrack({
+          id: "track-stale",
+          userId: "guest-1",
+          objectKey: "sessions/session-1/guest-1/track.webm"
+        }),
+        createTrack({
+          id: "track-other",
+          userId: "guest-2",
+          objectKey: "sessions/session-1/guest-2/track.webm"
+        })
+      ],
+      delete: async (id) => {
+        deletedTrackIds.push(id);
+      }
+    }),
+    createUploadTargetRepositoryMock({
+      findBySessionId: async () => [
+        createUploadTarget({
+          id: "target-stale",
+          key: "sessions/session-1/guest-1/track.webm",
+          expiresAt: new Date("2026-03-17T03:00:00.000Z")
+        }),
+        createUploadTarget({
+          id: "target-other",
+          key: "sessions/session-1/guest-2/track.webm"
+        })
+      ],
+      delete: async (id) => {
+        deletedTargetIds.push(id);
+      }
+    }),
+    createStorageProviderMock({
+      createMultipartUpload: async () => ({
+        uploadId: "upload-2",
+        urls: ["https://example.test/part-1"]
+      })
+    })
+  );
+
+  const result = await service.requestUploadUrls("session-1", "guest-1", 1);
+
+  assert.equal(result.uploadId, "upload-2");
+  assert.deepEqual(deletedTrackIds, ["track-stale"]);
+  assert.deepEqual(deletedTargetIds, ["target-stale"]);
+});
+
 test("completeUpload rejects uploads that do not belong to the authenticated user", async () => {
   let storageCompleted = false;
 

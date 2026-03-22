@@ -218,6 +218,20 @@ export default function RecordingRoomPage() {
       setUploadError("Missing participant identity. Rejoin the session before recording.");
       return;
     }
+    if (!sessionId) {
+      setUploadError("Missing session id.");
+      return;
+    }
+
+    try {
+      await clearChunks(sessionId, viewer.userId);
+    } catch (err) {
+      console.error("Failed to clear stale local chunks before recording", err);
+      setUploadError("Failed to reset local chunks before recording.");
+      return;
+    }
+
+    resetUploadState();
 
     const started = startRecording();
     if (!started) {
@@ -234,16 +248,6 @@ export default function RecordingRoomPage() {
         return;
       }
     }
-
-    try {
-      await clearChunks(sessionId, viewer.userId);
-    } catch (err) {
-      setUploadError("Failed to reset local chunks before recording.");
-      stopRecording(false);
-      return;
-    }
-
-    resetUploadState();
   };
 
   const participants: Participant[] = useMemo(

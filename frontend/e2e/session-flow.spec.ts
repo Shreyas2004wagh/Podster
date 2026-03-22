@@ -96,3 +96,26 @@ test("guest can join a session and land in the recording room", async ({ page })
   await page.waitForURL(/\/sessions\/demo-session\/record$/, { timeout: 15_000 });
   await expect(page.getByRole("button", { name: /start local recording/i })).toBeEnabled();
 });
+
+test("invalid stored viewer state is discarded before entering the recording flow", async ({ page }) => {
+  const sessionId = "session-invalid";
+  await page.addInitScript(({ key, value }) => {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  }, {
+    key: `podster.viewer.${sessionId}`,
+    value: {
+      sessionId: "another-session",
+      userId: 42,
+      role: "admin",
+      name: ""
+    }
+  });
+
+  await page.goto(`/sessions/${sessionId}/record`);
+
+  await expect(page.getByText(/participant identity is missing in this browser/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: /start local recording/i })).toBeDisabled();
+  await expect(
+    page.evaluate((storageKey) => window.localStorage.getItem(storageKey), `podster.viewer.${sessionId}`)
+  ).resolves.toBeNull();
+});
