@@ -134,6 +134,10 @@ export default function RecordingRoomPage() {
     () => uploadItems.some((item) => item.status === "pending" || item.status === "uploading"),
     [uploadItems]
   );
+  const hasFailedUploads = useMemo(
+    () => uploadItems.some((item) => item.status === "error"),
+    [uploadItems]
+  );
   const resetUploadState = () => {
     setUploadItems([]);
     setCompletedParts([]);
@@ -317,6 +321,7 @@ export default function RecordingRoomPage() {
         isProcessing={isProcessing}
         isUploadActive={isUploadActive}
         canStartRecording={Boolean(viewer && sessionId)}
+        canUploadChunks={!hasFailedUploads}
         startLabel={isHost ? "Start session and record" : "Start local recording"}
         helperText={
           viewer
