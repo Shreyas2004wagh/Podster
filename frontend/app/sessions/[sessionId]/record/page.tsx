@@ -50,6 +50,10 @@ export default function RecordingRoomPage() {
       setUploadError("An upload is already being prepared or is currently running.");
       return;
     }
+    if (hasFailedUploads) {
+      setUploadError("Resolve the failed upload before starting a new upload request.");
+      return;
+    }
 
     preparingUploadRef.current = true;
     console.log("handleUpload: Starting upload process...");
