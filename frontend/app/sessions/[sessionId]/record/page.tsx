@@ -12,7 +12,7 @@ import { useLocalMedia } from "@/lib/media/useLocalMedia";
 import { useMediaRecorder } from "@/lib/media/useMediaRecorder";
 import { buildUploadParts, listChunks, clearChunks } from "@/lib/storage/indexedDb";
 import { UploadWorkerClient, type UploadJob } from "@/lib/upload/workerClient";
-import { requestUploadUrls, startSession } from "@/lib/api/sessions";
+import { completeUpload, requestUploadUrls, startSession } from "@/lib/api/sessions";
 import { getViewerSession, type ViewerSession } from "@/lib/session/viewer";
 import { useWebRTC } from "@/lib/webrtc/useWebRTC";
 
@@ -124,7 +124,6 @@ export default function RecordingRoomPage() {
       sessionId,
       userId: viewer?.userId ?? `unknown-${sessionId}`,
       onStop: () => {
-        console.log("Recorder stopped, triggering auto-upload...");
         void handleUpload();
       }
     });
@@ -192,18 +191,11 @@ export default function RecordingRoomPage() {
 
       finalizingUploadRef.current = uploadId;
       const finalize = async () => {
-        console.log("All parts uploaded, finalizing...", {
-          uploadId,
-          partsCount: sortedCompletedParts.length,
-          parts: sortedCompletedParts
-        });
         try {
-          const { completeUpload } = await import("@/lib/api/sessions");
           await completeUpload(sessionId, {
             uploadId,
             parts: sortedCompletedParts
           });
-          console.log("Upload completed successfully!");
           await clearChunks(sessionId, viewer.userId);
           resetUploadState();
         } catch (err) {
