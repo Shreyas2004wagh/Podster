@@ -56,7 +56,6 @@ export default function RecordingRoomPage() {
     }
 
     preparingUploadRef.current = true;
-    console.log("handleUpload: Starting upload process...");
     setUploadError(null);
     setCompletedParts([]);
     setUploadId(null);
@@ -146,6 +145,7 @@ export default function RecordingRoomPage() {
     setCompletedParts([]);
     setUploadId(null);
     setUploadError(null);
+    uploadJobsRef.current = [];
     finalizingUploadRef.current = null;
   };
 
