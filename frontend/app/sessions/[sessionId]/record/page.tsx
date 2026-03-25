@@ -353,7 +353,7 @@ export default function RecordingRoomPage() {
                 variant="ghost"
                 size="sm"
                 onClick={handleRetryFailed}
-                disabled={isRecording || isProcessing || isUploadActive}
+                disabled={isRecording || isProcessing || isUploadActive || !hasFailedUploads}
               >
                 Retry failed
               </Button>
@@ -372,6 +372,11 @@ export default function RecordingRoomPage() {
           </p>
           <div className="mt-4">
             <UploadProgress items={uploadItems} />
+            {hasFailedUploads && (
+              <p className="mt-2 text-sm text-amber-200">
+                Failed uploads keep their local chunks until you retry them or clear them manually.
+              </p>
+            )}
             {uploadError && <p className="mt-2 text-sm text-red-200">{uploadError}</p>}
           </div>
         </Card>
