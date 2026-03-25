@@ -26,13 +26,11 @@ export function RecordingControls({
   durationLabel,
   onStart,
   onStop,
-  onSave
+  onSave,
 }: RecordingControlsProps) {
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 shadow-card">
-      <Badge tone={isRecording ? "warning" : "default"}>
-        {isRecording ? "Recording" : "Idle"}
-      </Badge>
+      <Badge tone={isRecording ? "warning" : "default"}>{isRecording ? "Recording" : "Idle"}</Badge>
       <span className="text-sm text-slate-200">{durationLabel}</span>
       <div className="flex flex-1 items-center gap-2">
         <Button
@@ -59,9 +57,7 @@ export function RecordingControls({
           Upload chunks
         </Button>
       </div>
-      {helperText && (
-        <p className="w-full text-xs text-amber-200">{helperText}</p>
-      )}
+      {helperText && <p className="w-full text-xs text-amber-200">{helperText}</p>}
     </div>
   );
 }

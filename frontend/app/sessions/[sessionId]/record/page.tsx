@@ -36,11 +36,15 @@ export default function RecordingRoomPage() {
     setViewer(getViewerSession(sessionId));
   }, [sessionId]);
 
-  const { stream, start: startMedia, error: mediaError } = useLocalMedia({ video: true, audio: true });
+  const {
+    stream,
+    start: startMedia,
+    error: mediaError,
+  } = useLocalMedia({ video: true, audio: true });
 
   const { remoteParticipants } = useWebRTC({
     sessionId,
-    stream: stream ?? null
+    stream: stream ?? null,
   });
 
   const isHost = viewer?.role === "host";
@@ -88,7 +92,9 @@ export default function RecordingRoomPage() {
         uploadParts.length
       );
       if (signed.length !== uploadParts.length) {
-        setUploadError(`Upload URL mismatch: expected ${uploadParts.length}, got ${signed.length}.`);
+        setUploadError(
+          `Upload URL mismatch: expected ${uploadParts.length}, got ${signed.length}.`
+        );
         return;
       }
 
@@ -96,7 +102,7 @@ export default function RecordingRoomPage() {
       const uploads = uploadParts.map((blob, idx) => ({
         id: `part-${idx + 1}`,
         url: signed[idx],
-        blob
+        blob,
       }));
       uploadJobsRef.current = uploads;
 
@@ -105,7 +111,7 @@ export default function RecordingRoomPage() {
           id: upload.id,
           filename: upload.id,
           progress: 0,
-          status: "pending"
+          status: "pending",
         }))
       );
 
@@ -124,10 +130,12 @@ export default function RecordingRoomPage() {
       userId: viewer?.userId ?? `unknown-${sessionId}`,
       onStop: () => {
         void handleUpload();
-      }
+      },
     });
 
-  const [completedParts, setCompletedParts] = useState<Array<{ partNumber: number; etag: string }>>([]);
+  const [completedParts, setCompletedParts] = useState<Array<{ partNumber: number; etag: string }>>(
+    []
+  );
   const sortedCompletedParts = useMemo(
     () => [...completedParts].sort((a, b) => a.partNumber - b.partNumber),
     [completedParts]
@@ -165,7 +173,8 @@ export default function RecordingRoomPage() {
       setUploadItems((prev) =>
         prev.map((item) => {
           if (item.id !== message.id) return item;
-          if (message.type === "progress") return { ...item, progress: message.progress, status: "uploading" };
+          if (message.type === "progress")
+            return { ...item, progress: message.progress, status: "uploading" };
           if (message.type === "completed") {
             setCompletedParts((prevParts) => {
               const partNumber = parseInt(message.id.replace("part-", ""), 10);
@@ -190,7 +199,8 @@ export default function RecordingRoomPage() {
   }, [startMedia]);
 
   useEffect(() => {
-    const allUploaded = uploadItems.length > 0 && uploadItems.every((item) => item.status === "completed");
+    const allUploaded =
+      uploadItems.length > 0 && uploadItems.every((item) => item.status === "completed");
     if (allUploaded && sortedCompletedParts.length === uploadItems.length && uploadId && viewer) {
       if (finalizingUploadRef.current === uploadId) {
         return;
@@ -201,7 +211,7 @@ export default function RecordingRoomPage() {
         try {
           await completeUpload(sessionId, {
             uploadId,
-            parts: sortedCompletedParts
+            parts: sortedCompletedParts,
           });
           await clearChunks(sessionId, viewer.userId);
           resetUploadState();
@@ -268,25 +278,29 @@ export default function RecordingRoomPage() {
         name: viewer?.name ?? "You",
         role: viewer?.role ?? "host",
         isLocal: true,
-        stream: stream ?? undefined
+        stream: stream ?? undefined,
       },
       ...remoteParticipants.map((participant) => ({
         id: participant.id,
         name: participant.name,
         role: participant.role,
-        stream: participant.stream
-      }))
+        stream: participant.stream,
+      })),
     ],
     [remoteParticipants, sessionId, stream, viewer]
   );
 
   const handleClearLocal = async () => {
     if (isRecording || isProcessing) {
-      setUploadError("Stop recording and wait for processing to finish before clearing local chunks.");
+      setUploadError(
+        "Stop recording and wait for processing to finish before clearing local chunks."
+      );
       return;
     }
     if (!viewer) {
-      setUploadError("Missing participant identity. Rejoin the session before clearing local chunks.");
+      setUploadError(
+        "Missing participant identity. Rejoin the session before clearing local chunks."
+      );
       return;
     }
     if (!sessionId) {
@@ -303,12 +317,16 @@ export default function RecordingRoomPage() {
   };
 
   const handleRetryFailed = () => {
-    const failedIds = new Set(uploadItems.filter((item) => item.status === "error").map((item) => item.id));
+    const failedIds = new Set(
+      uploadItems.filter((item) => item.status === "error").map((item) => item.id)
+    );
     if (failedIds.size === 0) return;
     setUploadError(null);
     setUploadItems((prev) =>
       prev.map((item) =>
-        failedIds.has(item.id) ? { ...item, progress: 0, status: "pending", errorMessage: undefined } : item
+        failedIds.has(item.id)
+          ? { ...item, progress: 0, status: "pending", errorMessage: undefined }
+          : item
       )
     );
     const retryJobs = uploadJobsRef.current.filter((job) => failedIds.has(job.id));
@@ -346,10 +364,13 @@ export default function RecordingRoomPage() {
         onSave={handleUpload}
       />
 
-      {(mediaError || lastError) && <p className="text-sm text-red-200">{mediaError ?? lastError}</p>}
+      {(mediaError || lastError) && (
+        <p className="text-sm text-red-200">{mediaError ?? lastError}</p>
+      )}
       {!viewer && (
         <p className="text-sm text-amber-200">
-          Participant identity is missing in this browser. Rejoin the session to record and upload safely.
+          Participant identity is missing in this browser. Rejoin the session to record and upload
+          safely.
         </p>
       )}
 
