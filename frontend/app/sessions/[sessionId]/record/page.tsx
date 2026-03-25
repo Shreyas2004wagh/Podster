@@ -148,6 +148,13 @@ export default function RecordingRoomPage() {
     uploadJobsRef.current = [];
     finalizingUploadRef.current = null;
   };
+  const recordingHelperText = !viewer
+    ? "Rejoin the session before recording."
+    : hasFailedUploads
+      ? "Retry or clear the failed upload before starting a new recording."
+      : isHost
+        ? undefined
+        : "Guests can record locally after joining, but only the host can start the session live.";
 
   useEffect(() => {
     void startMedia();
@@ -211,6 +218,10 @@ export default function RecordingRoomPage() {
   const handleStart = async () => {
     if (isUploadActive) {
       setUploadError("Wait for the current upload to finish before starting a new recording.");
+      return;
+    }
+    if (hasFailedUploads) {
+      setUploadError("Resolve the failed upload before starting a new recording.");
       return;
     }
 
@@ -316,16 +327,10 @@ export default function RecordingRoomPage() {
         isRecording={isRecording}
         isProcessing={isProcessing}
         isUploadActive={isUploadActive}
-        canStartRecording={Boolean(viewer && sessionId)}
+        canStartRecording={Boolean(viewer && sessionId) && !hasFailedUploads}
         canUploadChunks={!hasFailedUploads}
         startLabel={isHost ? "Start session and record" : "Start local recording"}
-        helperText={
-          viewer
-            ? isHost
-              ? undefined
-              : "Guests can record locally after joining, but only the host can start the session live."
-            : "Rejoin the session before recording."
-        }
+        helperText={recordingHelperText}
         durationLabel={durationLabel}
         onStart={handleStart}
         onStop={stopRecording}
