@@ -289,8 +289,17 @@ export default function RecordingRoomPage() {
       setUploadError("Missing participant identity. Rejoin the session before clearing local chunks.");
       return;
     }
-    await clearChunks(sessionId, viewer.userId);
-    resetUploadState();
+    if (!sessionId) {
+      setUploadError("Missing session id.");
+      return;
+    }
+    try {
+      await clearChunks(sessionId, viewer.userId);
+      resetUploadState();
+    } catch (err) {
+      console.error("Failed to clear local chunks", err);
+      setUploadError("Failed to clear local chunks. Try again.");
+    }
   };
 
   const handleRetryFailed = () => {
