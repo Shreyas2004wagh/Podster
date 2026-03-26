@@ -13,6 +13,7 @@ import { useMediaRecorder } from "@/lib/media/useMediaRecorder";
 import { buildUploadParts, listChunks, clearChunks } from "@/lib/storage/indexedDb";
 import { UploadWorkerClient, type UploadJob } from "@/lib/upload/workerClient";
 import { completeUpload, requestUploadUrls, startSession } from "@/lib/api/sessions";
+import { getSessionNotes } from "@/lib/session/notes";
 import { getViewerSession, type ViewerSession } from "@/lib/session/viewer";
 import { useWebRTC } from "@/lib/webrtc/useWebRTC";
 
@@ -24,6 +25,7 @@ export default function RecordingRoomPage() {
   const preparingUploadRef = useRef(false);
   const finalizingUploadRef = useRef<string | null>(null);
   const [viewer, setViewer] = useState<ViewerSession | null>(null);
+  const [sessionNotes, setSessionNotes] = useState("");
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadId, setUploadId] = useState<string | null>(null);
@@ -34,6 +36,7 @@ export default function RecordingRoomPage() {
     }
 
     setViewer(getViewerSession(sessionId));
+    setSessionNotes(getSessionNotes(sessionId));
   }, [sessionId]);
 
   const {
