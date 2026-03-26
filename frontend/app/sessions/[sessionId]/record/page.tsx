@@ -415,7 +415,16 @@ export default function RecordingRoomPage() {
         </Card>
         <Card>
           <h3 className="text-lg font-semibold text-white">Recording notes</h3>
-          <ul className="mt-3 space-y-2 text-sm text-slate-200">
+          {sessionNotes ? (
+            <div className="mt-3 whitespace-pre-wrap rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-slate-100">
+              {sessionNotes}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-slate-300">
+              No local notes saved for this session yet.
+            </p>
+          )}
+          <ul className="mt-4 space-y-2 text-sm text-slate-200">
             <li>- Recording uses local MediaRecorder, not WebRTC streams.</li>
             <li>- Uploads start only after you stop, via worker parallel PUTs.</li>
             <li>- IndexedDB keeps chunks so refreshes do not lose captures.</li>
