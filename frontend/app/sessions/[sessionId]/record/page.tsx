@@ -14,7 +14,7 @@ import { useMediaRecorder } from "@/lib/media/useMediaRecorder";
 import { buildUploadParts, listChunks, clearChunks } from "@/lib/storage/indexedDb";
 import { UploadWorkerClient, type UploadJob } from "@/lib/upload/workerClient";
 import { completeUpload, requestUploadUrls, startSession } from "@/lib/api/sessions";
-import { getSessionNotes } from "@/lib/session/notes";
+import { getSessionNotes, saveSessionNotes } from "@/lib/session/notes";
 import { getViewerSession, type ViewerSession } from "@/lib/session/viewer";
 import { useWebRTC } from "@/lib/webrtc/useWebRTC";
 
@@ -337,6 +337,11 @@ export default function RecordingRoomPage() {
     uploadWorker.current?.upload(retryJobs);
   };
 
+  const handleNotesChange = (notes: string) => {
+    setSessionNotes(notes);
+    saveSessionNotes(sessionId, notes);
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -420,7 +425,7 @@ export default function RecordingRoomPage() {
             className="mt-3 min-h-32"
             placeholder="Add local notes for this session..."
             value={sessionNotes}
-            onChange={(event) => setSessionNotes(event.target.value)}
+            onChange={(event) => handleNotesChange(event.target.value)}
           />
           <ul className="mt-4 space-y-2 text-sm text-slate-200">
             <li>- Recording uses local MediaRecorder, not WebRTC streams.</li>
