@@ -97,6 +97,40 @@ test("guest can join a session and land in the recording room", async ({ page })
   await expect(page.getByRole("button", { name: /start local recording/i })).toBeEnabled();
 });
 
+test("host notes persist into the recording room and survive a reload", async ({ page }) => {
+  await page.route("**/sessions", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({
+        session: buildSession("session-notes", "Notes episode", "host-1"),
+        viewer: {
+          sessionId: "session-notes",
+          userId: "host-1",
+          role: "host",
+          name: "Host"
+        }
+      })
+    });
+  });
+
+  await page.goto("/sessions/new");
+  await page.getByLabel("Session title").fill("Notes episode");
+  await page.getByLabel("Notes (local only)").fill("Intro beats\nSponsor read");
+  await page.getByRole("button", { name: /create and enter room/i }).click();
+
+  await page.waitForURL(/\/sessions\/session-notes\/record$/, { timeout: 15_000 });
+  await expect(page.getByLabel("Local notes")).toHaveValue("Intro beats\nSponsor read");
+
+  await page.reload();
+  await expect(page.getByLabel("Local notes")).toHaveValue("Intro beats\nSponsor read");
+});
+
 test("invalid stored viewer state is discarded before entering the recording flow", async ({ page }) => {
   const sessionId = "session-invalid";
   await page.addInitScript(({ key, value }) => {
