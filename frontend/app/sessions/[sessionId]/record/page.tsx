@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { VideoGrid, type Participant } from "@/components/video-grid";
 import { RecordingControls } from "@/components/recording-controls";
 import { UploadProgress, type UploadItem } from "@/components/upload-progress";
+import { TextArea } from "@/components/ui/textarea";
 import { useLocalMedia } from "@/lib/media/useLocalMedia";
 import { useMediaRecorder } from "@/lib/media/useMediaRecorder";
 import { buildUploadParts, listChunks, clearChunks } from "@/lib/storage/indexedDb";
@@ -415,15 +416,12 @@ export default function RecordingRoomPage() {
         </Card>
         <Card>
           <h3 className="text-lg font-semibold text-white">Recording notes</h3>
-          {sessionNotes ? (
-            <div className="mt-3 whitespace-pre-wrap rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-slate-100">
-              {sessionNotes}
-            </div>
-          ) : (
-            <p className="mt-3 text-sm text-slate-300">
-              No local notes saved for this session yet.
-            </p>
-          )}
+          <TextArea
+            className="mt-3 min-h-32"
+            placeholder="Add local notes for this session..."
+            value={sessionNotes}
+            onChange={(event) => setSessionNotes(event.target.value)}
+          />
           <ul className="mt-4 space-y-2 text-sm text-slate-200">
             <li>- Recording uses local MediaRecorder, not WebRTC streams.</li>
             <li>- Uploads start only after you stop, via worker parallel PUTs.</li>
