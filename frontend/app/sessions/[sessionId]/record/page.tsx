@@ -421,6 +421,9 @@ export default function RecordingRoomPage() {
         </Card>
         <Card>
           <h3 className="text-lg font-semibold text-white">Recording notes</h3>
+          <p className="mt-2 text-sm text-slate-300">
+            Notes stay in this browser only. They are never sent to the backend.
+          </p>
           <TextArea
             className="mt-3 min-h-32"
             placeholder="Add local notes for this session..."
