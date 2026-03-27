@@ -425,6 +425,7 @@ export default function RecordingRoomPage() {
             Notes stay in this browser only. They are never sent to the backend.
           </p>
           <TextArea
+            aria-label="Local notes"
             className="mt-3 min-h-32"
             placeholder="Add local notes for this session..."
             value={sessionNotes}
