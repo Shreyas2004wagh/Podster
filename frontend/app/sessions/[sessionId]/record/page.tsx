@@ -27,6 +27,7 @@ export default function RecordingRoomPage() {
   const finalizingUploadRef = useRef<string | null>(null);
   const [viewer, setViewer] = useState<ViewerSession | null>(null);
   const [sessionNotes, setSessionNotes] = useState("");
+  const [storedChunkCount, setStoredChunkCount] = useState(0);
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadId, setUploadId] = useState<string | null>(null);
@@ -37,8 +38,16 @@ export default function RecordingRoomPage() {
     }
 
     setViewer(getViewerSession(sessionId));
-    setSessionNotes(getSessionNotes(sessionId));
   }, [sessionId]);
+
+  useEffect(() => {
+    if (!sessionId || !viewer) {
+      setSessionNotes("");
+      return;
+    }
+
+    setSessionNotes(getSessionNotes(sessionId, viewer.userId));
+  }, [sessionId, viewer]);
 
   const {
     stream,
@@ -152,6 +161,7 @@ export default function RecordingRoomPage() {
     () => uploadItems.some((item) => item.status === "error"),
     [uploadItems]
   );
+  const hasRecoverableChunks = storedChunkCount > 0 && !isUploadActive && !hasFailedUploads;
   const resetUploadState = () => {
     setUploadItems([]);
     setCompletedParts([]);
@@ -162,11 +172,41 @@ export default function RecordingRoomPage() {
   };
   const recordingHelperText = !viewer
     ? "Rejoin the session before recording."
+    : hasRecoverableChunks
+      ? "Recorded chunks were found locally. Upload or clear them before starting a new take."
     : hasFailedUploads
       ? "Retry or clear the failed upload before starting a new recording."
       : isHost
         ? undefined
         : "Guests can record locally after joining, but only the host can start the session live.";
+
+  useEffect(() => {
+    if (!sessionId || !viewer) {
+      setStoredChunkCount(0);
+      return;
+    }
+
+    let cancelled = false;
+
+    const syncStoredChunkCount = async () => {
+      try {
+        const chunks = await listChunks(sessionId, viewer.userId);
+        if (!cancelled) {
+          setStoredChunkCount(chunks.length);
+        }
+      } catch {
+        if (!cancelled) {
+          setStoredChunkCount(0);
+        }
+      }
+    };
+
+    void syncStoredChunkCount();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, viewer]);
 
   useEffect(() => {
     void startMedia();
@@ -218,6 +258,7 @@ export default function RecordingRoomPage() {
             parts: sortedCompletedParts,
           });
           await clearChunks(sessionId, viewer.userId);
+          setStoredChunkCount(0);
           resetUploadState();
         } catch (err) {
           finalizingUploadRef.current = null;
@@ -232,6 +273,10 @@ export default function RecordingRoomPage() {
   const handleStart = async () => {
     if (isUploadActive) {
       setUploadError("Wait for the current upload to finish before starting a new recording.");
+      return;
+    }
+    if (hasRecoverableChunks) {
+      setUploadError("Upload or clear the saved local chunks before starting a new recording.");
       return;
     }
     if (hasFailedUploads) {
@@ -250,6 +295,7 @@ export default function RecordingRoomPage() {
 
     try {
       await clearChunks(sessionId, viewer.userId);
+      setStoredChunkCount(0);
     } catch (err) {
       console.error("Failed to clear stale local chunks before recording", err);
       setUploadError("Failed to reset local chunks before recording.");
@@ -313,6 +359,7 @@ export default function RecordingRoomPage() {
     }
     try {
       await clearChunks(sessionId, viewer.userId);
+      setStoredChunkCount(0);
       resetUploadState();
     } catch (err) {
       console.error("Failed to clear local chunks", err);
@@ -339,7 +386,10 @@ export default function RecordingRoomPage() {
 
   const handleNotesChange = (notes: string) => {
     setSessionNotes(notes);
-    saveSessionNotes(sessionId, notes);
+    if (!viewer || !sessionId) {
+      return;
+    }
+    saveSessionNotes(sessionId, viewer.userId, notes);
   };
 
   return (
@@ -363,7 +413,7 @@ export default function RecordingRoomPage() {
         isRecording={isRecording}
         isProcessing={isProcessing}
         isUploadActive={isUploadActive}
-        canStartRecording={Boolean(viewer && sessionId) && !hasFailedUploads}
+        canStartRecording={Boolean(viewer && sessionId) && !hasFailedUploads && !hasRecoverableChunks}
         canUploadChunks={!hasFailedUploads}
         startLabel={isHost ? "Start session and record" : "Start local recording"}
         helperText={recordingHelperText}
@@ -414,6 +464,11 @@ export default function RecordingRoomPage() {
             {hasFailedUploads && (
               <p className="mt-2 text-sm text-amber-200">
                 Failed uploads keep their local chunks until you retry them or clear them manually.
+              </p>
+            )}
+            {hasRecoverableChunks && (
+              <p className="mt-2 text-sm text-amber-200">
+                A previous take is still saved in this browser. Upload it or clear it before starting again.
               </p>
             )}
             {uploadError && <p className="mt-2 text-sm text-red-200">{uploadError}</p>}

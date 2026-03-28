@@ -25,7 +25,7 @@ export default function CreateSessionPage() {
     try {
       const result = await createSession({ title: trimmedTitle });
       saveViewerSession(result.viewer);
-      saveSessionNotes(result.session.id, notes);
+      saveSessionNotes(result.session.id, result.viewer.userId, notes);
       router.push(`/sessions/${result.session.id}/record`);
     } catch (err) {
       setError((err as Error).message);
