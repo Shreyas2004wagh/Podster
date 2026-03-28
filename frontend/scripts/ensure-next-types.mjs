@@ -49,6 +49,8 @@ async function main() {
   const appEntries = await collectAppEntries(appRoot);
 
   await fs.mkdir(path.join(frontendRoot, ".next", "types"), { recursive: true });
+  await fs.rm(typesRoot, { recursive: true, force: true });
+  await fs.mkdir(typesRoot, { recursive: true });
   await fs.writeFile(
     path.join(frontendRoot, ".next", "types", "package.json"),
     '{ "type": "module" }\n',
