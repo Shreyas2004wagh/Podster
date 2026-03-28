@@ -129,6 +129,7 @@ function createStorageProviderMock(overrides: Partial<IStorageProvider> = {}): I
       uploadId: "upload-1",
       urls: ["https://example.test/part-1", "https://example.test/part-2"]
     }),
+    abortMultipartUpload: async () => undefined,
     completeMultipartUpload: async () => undefined,
     getSignedDownloadUrl: async () => "https://example.test/download",
     checkHealth: async () => ({
@@ -285,6 +286,72 @@ test("requestUploadUrls clears stale incomplete uploads before creating a fresh 
   assert.equal(result.uploadId, "upload-2");
   assert.deepEqual(deletedTrackIds, ["track-stale"]);
   assert.deepEqual(deletedTargetIds, ["target-stale"]);
+});
+
+test("requestUploadUrls rolls back storage and metadata when track creation fails", async () => {
+  const updatedStatuses: SessionStatus[] = [];
+  const deletedTargetIds: string[] = [];
+  const abortedUploads: Array<{ key: string; uploadId: string }> = [];
+  const originalDateNow = Date.now;
+  Date.now = () => 1_710_000_000_000;
+
+  try {
+    const service = new SessionService(
+      createSessionRepositoryMock({
+        findById: async () => createSession({ status: SessionStatus.DRAFT }),
+        update: async (_id, input) => {
+          updatedStatuses.push(input.status ?? SessionStatus.DRAFT);
+          return createSession({ status: input.status ?? SessionStatus.DRAFT });
+        }
+      }),
+      createTrackRepositoryMock({
+        create: async () => {
+          throw new Error("track create failed");
+        }
+      }),
+      createUploadTargetRepositoryMock({
+        create: async (input) =>
+          createUploadTarget({
+            id: "target-created",
+            sessionId: input.sessionId,
+            uploadId: input.uploadId,
+            key: input.key,
+            bucket: input.bucket,
+            provider: input.provider,
+            partCount: input.partCount,
+            expiresAt: input.expiresAt
+          }),
+        delete: async (id) => {
+          deletedTargetIds.push(id);
+        }
+      }),
+      createStorageProviderMock({
+        createMultipartUpload: async () => ({
+          uploadId: "upload-rollback",
+          urls: ["https://example.test/part-1"]
+        }),
+        abortMultipartUpload: async (request) => {
+          abortedUploads.push(request);
+        }
+      })
+    );
+
+    await assert.rejects(
+      service.requestUploadUrls("session-1", "guest-1", 1),
+      /track create failed/
+    );
+
+    assert.deepEqual(updatedStatuses, [SessionStatus.UPLOADING, SessionStatus.DRAFT]);
+    assert.deepEqual(deletedTargetIds, ["target-created"]);
+    assert.deepEqual(abortedUploads, [
+      {
+        key: "sessions/session-1/guest-1/1710000000000.webm",
+        uploadId: "upload-rollback"
+      }
+    ]);
+  } finally {
+    Date.now = originalDateNow;
+  }
 });
 
 test("completeUpload rejects uploads that do not belong to the authenticated user", async () => {

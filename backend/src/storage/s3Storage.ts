@@ -1,5 +1,6 @@
 import {
   S3Client,
+  AbortMultipartUploadCommand,
   CreateMultipartUploadCommand,
   CompleteMultipartUploadCommand,
   UploadPartCommand,
@@ -8,6 +9,7 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env } from "../config/env.js";
 import type {
+  AbortUploadRequest,
   CompleteUploadRequest,
   DownloadUrlRequest,
   MultipartUploadRequest,
@@ -63,6 +65,16 @@ export class S3StorageProvider implements IStorageProvider {
       uploadId,
       urls
     };
+  }
+
+  async abortMultipartUpload(request: AbortUploadRequest): Promise<void> {
+    const command = new AbortMultipartUploadCommand({
+      Bucket: env.STORAGE_BUCKET,
+      Key: request.key,
+      UploadId: request.uploadId
+    });
+
+    await this.s3.send(command);
   }
 
   async completeMultipartUpload(request: CompleteUploadRequest): Promise<void> {

@@ -215,43 +215,87 @@ export class SessionService implements ISessionService {
       const key = `sessions/${sessionId}/${uploaderId}/${Date.now()}.webm`;
       const { uploadId, urls } = await this.storage.createMultipartUpload({ key, partCount });
 
-      if (session.status !== SessionStatus.UPLOADING) {
-        await this.sessionRepository.update(sessionId, {
-          status: SessionStatus.UPLOADING
-        });
+      let statusChanged = false;
+      let createdUploadTargetId: string | null = null;
+      let createdTrackId: string | null = null;
+
+      try {
+        if (session.status !== SessionStatus.UPLOADING) {
+          await this.sessionRepository.update(sessionId, {
+            status: SessionStatus.UPLOADING
+          });
+          statusChanged = true;
+        }
+
+        const uploadTargetInput: CreateUploadTargetInput = {
+          sessionId,
+          uploadId,
+          key,
+          bucket: env.STORAGE_BUCKET,
+          provider: this.resolveStorageProvider(),
+          expiresAt: new Date(Date.now() + UPLOAD_TARGET_TTL_SECONDS * 1000),
+          partCount
+        };
+        const uploadTarget = await this.uploadTargetRepository.create(uploadTargetInput);
+        createdUploadTargetId = uploadTarget.id;
+
+        const trackInput: CreateTrackInput = {
+          sessionId,
+          userId: uploaderId,
+          kind: TrackKind.VIDEO,
+          objectKey: key
+        };
+        const track = await this.trackRepository.create(trackInput);
+        createdTrackId = track.id;
+
+        const duration = Date.now() - startTime;
+        this.logger.info({
+          event: "upload_urls_generated",
+          sessionId,
+          trackId: track.id,
+          uploadId,
+          partCount,
+          duration,
+        }, `Upload URLs generated in ${duration}ms`);
+
+        return { uploadId, urls, trackId: track.id, objectKey: key };
+      } catch (error) {
+        const rollbackOperations: Promise<unknown>[] = [
+          this.storage.abortMultipartUpload({ key, uploadId })
+        ];
+
+        if (createdTrackId) {
+          rollbackOperations.push(this.trackRepository.delete(createdTrackId));
+        }
+
+        if (createdUploadTargetId) {
+          rollbackOperations.push(this.uploadTargetRepository.delete(createdUploadTargetId));
+        }
+
+        if (statusChanged) {
+          rollbackOperations.push(
+            this.sessionRepository.update(sessionId, {
+              status: session.status
+            })
+          );
+        }
+
+        const rollbackResults = await Promise.allSettled(rollbackOperations);
+        const rollbackFailures = rollbackResults.filter((result) => result.status === "rejected");
+        if (rollbackFailures.length > 0) {
+          this.logger.error({
+            event: "upload_request_rollback_failed",
+            sessionId,
+            uploadId,
+            rollbackFailures: rollbackFailures.map((result) => ({
+              name: result.reason instanceof Error ? result.reason.name : "UnknownError",
+              message: result.reason instanceof Error ? result.reason.message : String(result.reason)
+            }))
+          }, "Rollback after upload request failure did not complete cleanly");
+        }
+
+        throw error;
       }
-
-      const uploadTargetInput: CreateUploadTargetInput = {
-        sessionId,
-        uploadId,
-        key,
-        bucket: env.STORAGE_BUCKET,
-        provider: this.resolveStorageProvider(),
-        expiresAt: new Date(Date.now() + UPLOAD_TARGET_TTL_SECONDS * 1000),
-        partCount
-      };
-      await this.uploadTargetRepository.create(uploadTargetInput);
-
-      // Create track
-      const trackInput: CreateTrackInput = {
-        sessionId,
-        userId: uploaderId,
-        kind: TrackKind.VIDEO,
-        objectKey: key
-      };
-      const track = await this.trackRepository.create(trackInput);
-
-      const duration = Date.now() - startTime;
-      this.logger.info({
-        event: "upload_urls_generated",
-        sessionId,
-        trackId: track.id,
-        uploadId,
-        partCount,
-        duration,
-      }, `Upload URLs generated in ${duration}ms`);
-
-      return { uploadId, urls, trackId: track.id, objectKey: key };
     } catch (error) {
       const duration = Date.now() - startTime;
       this.logger.error({
