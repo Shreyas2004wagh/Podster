@@ -29,6 +29,7 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
     const signaling = useRef<SignalingClient | null>(null);
     const peers = useRef<Map<string, RTCPeerConnection>>(new Map());
     const participantMeta = useRef<Map<string, ParticipantMeta>>(new Map());
+    const streamRef = useRef<MediaStream | null>(stream);
     const [remoteParticipants, setRemoteParticipants] = useState<RemoteParticipant[]>([]);
 
     const rememberParticipant = useCallback((id: string, meta?: Partial<ParticipantMeta> | null) => {
@@ -73,17 +74,53 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
         }
     }, []);
 
+    const syncPeerConnectionTracks = useCallback(
+        (pc: RTCPeerConnection, nextStream: MediaStream | null) => {
+            const sendersByKind = new Map<string, RTCRtpSender>();
+            pc.getSenders().forEach((sender) => {
+                if (sender.track) {
+                    sendersByKind.set(sender.track.kind, sender);
+                }
+            });
+
+            if (!nextStream) {
+                sendersByKind.forEach((sender) => {
+                    void sender.replaceTrack(null).catch(() => undefined);
+                });
+                return;
+            }
+
+            nextStream.getTracks().forEach((track) => {
+                const sender = sendersByKind.get(track.kind);
+                if (sender) {
+                    sendersByKind.delete(track.kind);
+                    if (sender.track?.id !== track.id) {
+                        void sender.replaceTrack(track).catch(() => undefined);
+                    }
+                    return;
+                }
+
+                pc.addTrack(track, nextStream);
+            });
+
+            sendersByKind.forEach((sender) => {
+                void sender.replaceTrack(null).catch(() => undefined);
+            });
+        },
+        []
+    );
+
     const createPeerConnection = useCallback((targetId: string, initiator: boolean) => {
         if (peers.current.has(targetId)) return peers.current.get(targetId)!;
 
-        console.log(`Creating PeerConnection for ${targetId} (initiator: ${initiator})`);
         const pc = new RTCPeerConnection(STUN_SERVERS);
         peers.current.set(targetId, pc);
 
         // Add local tracks
-        if (stream) {
-            stream.getTracks().forEach((track) => {
-                pc.addTrack(track, stream);
+        const localStream = streamRef.current;
+        if (localStream) {
+            localStream.getTracks().forEach((track) => {
+                pc.addTrack(track, localStream);
             });
         }
 
@@ -98,32 +135,35 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
         pc.ontrack = (event) => {
             const [remoteStream] = event.streams;
             if (!remoteStream) return;
-            console.log(`Received remote track from ${targetId}`, remoteStream);
             addRemoteStream(targetId, remoteStream);
         };
 
         pc.onconnectionstatechange = () => {
-            console.log(`PC ${targetId} state: ${pc.connectionState}`);
             if (pc.connectionState === "disconnected" || pc.connectionState === "failed" || pc.connectionState === "closed") {
                 removeParticipant(targetId);
             }
         };
 
-        // Negotiation needed (only for initiator to avoid glare/loops)
-        if (initiator) {
-            pc.onnegotiationneeded = async () => {
-                try {
-                    const offer = await pc.createOffer();
-                    await pc.setLocalDescription(offer);
-                    signaling.current?.sendOffer(targetId, offer);
-                } catch (err) {
-                    console.error("Negotiation failed", err);
-                }
-            };
-        }
+        pc.onnegotiationneeded = async () => {
+            if (!initiator && !streamRef.current) {
+                return;
+            }
+
+            if (pc.signalingState !== "stable") {
+                return;
+            }
+
+            try {
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                signaling.current?.sendOffer(targetId, offer);
+            } catch (err) {
+                console.error("Negotiation failed", err);
+            }
+        };
 
         return pc;
-    }, [stream, addRemoteStream, removeParticipant]);
+    }, [addRemoteStream, removeParticipant]);
 
     const handleOffer = useCallback(async (data: {
         from: string;
@@ -166,7 +206,6 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
     }, [rememberParticipant]);
 
     const handleUserJoined = useCallback((data: { socketId: string; user?: ParticipantMeta }) => {
-        console.log("User joined:", data.socketId);
         rememberParticipant(data.socketId, data.user);
         // As the host, I'm already here. The new guy (Guest) joined.
         // Or if I'm guest, and Host joins? 
@@ -176,17 +215,18 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
     }, [createPeerConnection, rememberParticipant]);
 
     const handleUserLeft = useCallback((data: { socketId: string }) => {
-        console.log("User left:", data.socketId);
         removeParticipant(data.socketId);
     }, [removeParticipant]);
 
     useEffect(() => {
-        if (!sessionId || !stream) return;
+        if (!sessionId) return;
 
         const client = new SignalingClient({ sessionId });
         signaling.current = client;
 
-        client.on("connect", () => console.log("WebRTC: connected to signaling"));
+        const handleConnect = () => console.log("WebRTC: connected to signaling");
+
+        client.on("connect", handleConnect);
         client.on("user-joined", handleUserJoined);
         client.on("user-left", handleUserLeft);
         client.on("offer", handleOffer);
@@ -196,13 +236,26 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
         client.connect();
 
         return () => {
+            client.off("connect", handleConnect);
+            client.off("user-joined", handleUserJoined);
+            client.off("user-left", handleUserLeft);
+            client.off("offer", handleOffer);
+            client.off("answer", handleAnswer);
+            client.off("ice-candidate", handleCandidate);
             client.disconnect();
             peers.current.forEach((pc) => pc.close());
             peers.current.clear();
             participantMeta.current.clear();
             setRemoteParticipants([]);
         };
-    }, [sessionId, stream, handleUserJoined, handleUserLeft, handleOffer, handleAnswer, handleCandidate]);
+    }, [sessionId, handleUserJoined, handleUserLeft, handleOffer, handleAnswer, handleCandidate]);
+
+    useEffect(() => {
+        streamRef.current = stream;
+        peers.current.forEach((pc) => {
+            syncPeerConnectionTracks(pc, stream);
+        });
+    }, [stream, syncPeerConnectionTracks]);
 
     return { remoteParticipants };
 }
