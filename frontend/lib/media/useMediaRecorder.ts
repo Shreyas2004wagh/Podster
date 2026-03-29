@@ -9,6 +9,27 @@ interface UseMediaRecorderOptions {
   onStop?: () => void;
 }
 
+function getRecorderErrorMessage(error: unknown) {
+  if (error instanceof DOMException) {
+    switch (error.name) {
+      case "NotSupportedError":
+        return "Recording is not supported with the current browser media format.";
+      case "InvalidStateError":
+        return "Recording could not continue because the recorder is no longer active.";
+      case "SecurityError":
+        return "Recording was blocked by the browser security policy.";
+      default:
+        return error.message || "Recording failed unexpectedly.";
+    }
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "Recording failed unexpectedly.";
+}
+
 export function useMediaRecorder({
   stream,
   sessionId,
@@ -41,6 +62,9 @@ export function useMediaRecorder({
   const startRecording = useCallback(() => {
     if (!stream || !canRecord) {
       setLastError("Recording not available in this browser or stream not ready.");
+      setStartedAt(null);
+      setIsRecording(false);
+      setIsProcessing(false);
       return false;
     }
 
@@ -59,7 +83,10 @@ export function useMediaRecorder({
     try {
       recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
     } catch (err) {
-      setLastError(`Failed to create recorder: ${(err as Error).message}`);
+      setLastError(`Failed to create recorder: ${getRecorderErrorMessage(err)}`);
+      setStartedAt(null);
+      setIsRecording(false);
+      setIsProcessing(false);
       shouldNotifyOnStop.current = false;
       return false;
     }
@@ -95,10 +122,15 @@ export function useMediaRecorder({
 
     recorder.onerror = (err) => {
       shouldNotifyOnStop.current = false;
-      setLastError(err.error.message);
+      recorderRef.current = null;
+      setStartedAt(null);
+      setIsRecording(false);
+      setIsProcessing(false);
+      setLastError(getRecorderErrorMessage(err.error));
     };
 
     recorder.onstop = () => {
+      recorderRef.current = null;
       const notifyOnStop = shouldNotifyOnStop.current;
       shouldNotifyOnStop.current = false;
       void (async () => {
@@ -110,6 +142,7 @@ export function useMediaRecorder({
         hasChunkPersistenceFailure.current = hadPersistenceFailure;
         setIsRecording(false);
         setIsProcessing(false);
+        setStartedAt(null);
         if (hadPersistenceFailure) {
           setLastError("A recording chunk failed to persist locally. Upload was cancelled.");
           return;
@@ -125,7 +158,10 @@ export function useMediaRecorder({
     } catch (err) {
       recorderRef.current = null;
       shouldNotifyOnStop.current = false;
-      setLastError(`Failed to start recorder: ${(err as Error).message}`);
+      setLastError(`Failed to start recorder: ${getRecorderErrorMessage(err)}`);
+      setStartedAt(null);
+      setIsRecording(false);
+      setIsProcessing(false);
       return false;
     }
 

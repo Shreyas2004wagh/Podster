@@ -5,6 +5,31 @@ interface UseLocalMediaOptions {
   audio?: boolean;
 }
 
+function getMediaErrorMessage(error: unknown) {
+  if (error instanceof DOMException) {
+    switch (error.name) {
+      case "NotAllowedError":
+      case "SecurityError":
+        return "Camera and microphone access was blocked. Allow permission and try again.";
+      case "NotFoundError":
+        return "No camera or microphone was found on this device.";
+      case "NotReadableError":
+      case "AbortError":
+        return "Camera or microphone is already in use by another app.";
+      case "OverconstrainedError":
+        return "The selected camera or microphone settings are not supported on this device.";
+      default:
+        return error.message || "Failed to start camera and microphone capture.";
+    }
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "Failed to start camera and microphone capture.";
+}
+
 export function useLocalMedia(options: UseLocalMediaOptions = { video: true, audio: true }) {
   const [stream, setStreamState] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +56,12 @@ export function useLocalMedia(options: UseLocalMediaOptions = { video: true, aud
       return startPromiseRef.current;
     }
 
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      const message = "Camera and microphone capture is not available in this browser.";
+      setError(message);
+      return null;
+    }
+
     setIsStarting(true);
     setError(null);
     startPromiseRef.current = (async () => {
@@ -38,7 +69,6 @@ export function useLocalMedia(options: UseLocalMediaOptions = { video: true, aud
         video: options.video,
         audio: options.audio
       });
-      console.log("useLocalMedia: Got stream", mediaStream.id);
 
       // Stop old stream if exists before setting new one (though usually start shouldn't be called if active)
       if (streamRef.current && streamRef.current.id !== mediaStream.id) {
@@ -53,8 +83,7 @@ export function useLocalMedia(options: UseLocalMediaOptions = { video: true, aud
     try {
       return await startPromiseRef.current;
     } catch (err) {
-      console.error("useLocalMedia Error:", err);
-      setError((err as Error).message);
+      setError(getMediaErrorMessage(err));
       setStream(null);
       return null;
     } finally {
@@ -69,7 +98,6 @@ export function useLocalMedia(options: UseLocalMediaOptions = { video: true, aud
     const optsChanged = options.audio !== lastOptions.current.audio || options.video !== lastOptions.current.video;
 
     if (streamRef.current && optsChanged) {
-      console.log("useLocalMedia: Options changed, restarting...");
       stop();
       void start();
     }
@@ -78,7 +106,6 @@ export function useLocalMedia(options: UseLocalMediaOptions = { video: true, aud
   // Cleanup on unmount ONLY
   useEffect(() => {
     return () => {
-      console.log("useLocalMedia: Unmounting/Cleaning up");
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
       }
