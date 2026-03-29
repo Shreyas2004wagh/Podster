@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import type { Session } from "@podster/shared";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { getDownloadUrl, getSession } from "@/lib/api/sessions";
+import { getDownloadUrl, getRecordingUrl, getSession } from "@/lib/api/sessions";
 
 export default function SessionDashboardPage() {
   const params = useParams<{ sessionId: string }>();
@@ -14,13 +14,48 @@ export default function SessionDashboardPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const completedTrackCount = useMemo(
+    () => session?.tracks?.filter((track) => Boolean(track.completedAt)).length ?? 0,
+    [session]
+  );
+
+  const loadSession = useCallback(
+    async (showSpinner: boolean) => {
+      if (!sessionId) return;
+
+      if (showSpinner) {
+        setIsRefreshing(true);
+      }
+
+      try {
+        setError(null);
+        const nextSession = await getSession(sessionId);
+        setSession(nextSession);
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        if (showSpinner) {
+          setIsRefreshing(false);
+        }
+      }
+    },
+    [sessionId]
+  );
 
   useEffect(() => {
     if (!sessionId) return;
-    getSession(sessionId)
-      .then(setSession)
-      .catch((err) => setError((err as Error).message));
-  }, [sessionId]);
+
+    void loadSession(true);
+    const interval = window.setInterval(() => {
+      void loadSession(false);
+    }, 15_000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [loadSession, sessionId]);
 
   return (
     <div className="space-y-6">
@@ -30,7 +65,28 @@ export default function SessionDashboardPage() {
           <h1 className="text-3xl font-semibold text-white">Dashboard {sessionId}</h1>
           <p className="text-slate-300">Review tracks and download completed uploads.</p>
         </div>
-        <Badge>{session?.status ?? "loading"}</Badge>
+        <div className="flex items-center gap-2">
+          <Badge>{session?.status ?? "loading"}</Badge>
+          <Button variant="ghost" size="sm" onClick={() => void loadSession(true)} disabled={!sessionId || isRefreshing}>
+            {isRefreshing ? "Refreshing..." : "Refresh"}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={completedTrackCount === 0}
+            onClick={async () => {
+              try {
+                setDownloadError(null);
+                const result = await getRecordingUrl(sessionId);
+                window.open(result.url, "_blank", "noopener,noreferrer");
+              } catch (err) {
+                setDownloadError((err as Error).message);
+              }
+            }}
+          >
+            Open latest recording
+          </Button>
+        </div>
       </div>
 
       {error && <p className="text-sm text-red-200">{error}</p>}
@@ -38,6 +94,11 @@ export default function SessionDashboardPage() {
       <Card>
         <h3 className="text-lg font-semibold text-white">Tracks</h3>
         {!session && <p className="text-sm text-slate-300">Loading session...</p>}
+        {session && (
+          <p className="mt-2 text-sm text-slate-300">
+            {completedTrackCount} completed track{completedTrackCount === 1 ? "" : "s"} available.
+          </p>
+        )}
         {session?.tracks?.length === 0 && (
           <p className="text-sm text-slate-300">No tracks yet. Record to create uploads.</p>
         )}

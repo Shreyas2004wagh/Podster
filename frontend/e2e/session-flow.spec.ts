@@ -241,3 +241,56 @@ test("invalid stored viewer state is discarded before entering the recording flo
     page.evaluate((storageKey) => window.localStorage.getItem(storageKey), `podster.viewer.${sessionId}`)
   ).resolves.toBeNull();
 });
+
+test("dashboard refresh pulls in newly completed tracks", async ({ page }) => {
+  const sessionId = "session-dashboard";
+  let sessionRequestCount = 0;
+
+  await page.addInitScript(({ key, value }) => {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  }, seedViewer(sessionId, {
+    sessionId,
+    userId: "host-1",
+    role: "host",
+    name: "Host"
+  }));
+
+  await page.route(`http://localhost:4000/sessions/${sessionId}`, async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
+
+    sessionRequestCount += 1;
+    const body = sessionRequestCount === 1
+      ? buildSession(sessionId, "Dashboard episode", "host-1")
+      : {
+          ...buildSession(sessionId, "Dashboard episode", "host-1"),
+          tracks: [
+            {
+              id: "track-1",
+              sessionId,
+              userId: "host-1",
+              kind: "video",
+              objectKey: "sessions/session-dashboard/host-1/final.webm",
+              createdAt: new Date("2026-03-20T00:00:00.000Z").toISOString(),
+              completedAt: new Date("2026-03-20T00:05:00.000Z").toISOString()
+            }
+          ]
+        };
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(body)
+    });
+  });
+
+  await page.goto(`/sessions/${sessionId}`);
+
+  await page.getByRole("button", { name: /^refresh$/i }).click();
+
+  await expect(page.getByText(/1 completed track available/i)).toBeVisible();
+  await expect(page.getByText(/sessions\/session-dashboard\/host-1\/final\.webm/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: /open latest recording/i })).toBeEnabled();
+});

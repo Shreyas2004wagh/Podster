@@ -60,3 +60,9 @@ export async function getDownloadUrl(
     method: "GET"
   });
 }
+
+export async function getRecordingUrl(sessionId: SessionId) {
+  return apiFetch<{ url: string }>(`/sessions/${sessionId}/recording`, {
+    method: "GET"
+  });
+}
