@@ -76,6 +76,7 @@ test("guest can record locally without seeing the host start control path", asyn
   await page.goto(`/sessions/${sessionId}/record`);
 
   await expect(page.getByRole("button", { name: /start local recording/i })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /upload chunks/i })).toBeDisabled();
   await expect(page.getByText(/only the host can start the session live/i)).toBeVisible();
 });
 
@@ -213,6 +214,7 @@ test("saved local chunks block starting a fresh take after a reload", async ({ p
   await page.goto(`/sessions/${sessionId}/record`);
 
   await expect(page.getByRole("button", { name: /start session and record/i })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /upload chunks/i })).toBeEnabled();
   await expect(page.getByText(/recorded chunks were found locally/i)).toBeVisible();
   await expect(page.getByText(/previous take is still saved in this browser/i)).toBeVisible();
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -61,8 +61,26 @@ export default function RecordingRoomPage() {
   });
 
   const isHost = viewer?.role === "host";
+  const refreshStoredChunkCount = useCallback(
+    async (targetViewer = viewer) => {
+      if (!sessionId || !targetViewer) {
+        setStoredChunkCount(0);
+        return [];
+      }
 
-  const handleUpload = async () => {
+      try {
+        const chunks = await listChunks(sessionId, targetViewer.userId);
+        setStoredChunkCount(chunks.length);
+        return chunks;
+      } catch {
+        setStoredChunkCount(0);
+        return [];
+      }
+    },
+    [sessionId, viewer]
+  );
+
+  async function handleUpload() {
     if (preparingUploadRef.current || isUploadActive) {
       setUploadError("An upload is already being prepared or is currently running.");
       return;
@@ -90,10 +108,11 @@ export default function RecordingRoomPage() {
 
       if (lastError) {
         setUploadError(lastError);
+        await refreshStoredChunkCount(viewer);
         return;
       }
 
-      const chunks = await listChunks(sessionId, viewer.userId);
+      const chunks = await refreshStoredChunkCount(viewer);
       if (!chunks.length) {
         setUploadError("No recorded chunks found in IndexedDB.");
         return;
@@ -131,10 +150,11 @@ export default function RecordingRoomPage() {
       uploadWorker.current?.upload(uploads);
     } catch (err) {
       setUploadError((err as Error).message || "Failed to get upload URLs from server.");
+      await refreshStoredChunkCount(viewer);
     } finally {
       preparingUploadRef.current = false;
     }
-  };
+  }
 
   const { startRecording, stopRecording, isRecording, isProcessing, durationLabel, lastError } =
     useMediaRecorder({
@@ -161,7 +181,8 @@ export default function RecordingRoomPage() {
     () => uploadItems.some((item) => item.status === "error"),
     [uploadItems]
   );
-  const hasRecoverableChunks = storedChunkCount > 0 && !isUploadActive && !hasFailedUploads;
+  const hasStoredChunks = storedChunkCount > 0;
+  const hasRecoverableChunks = hasStoredChunks && !isUploadActive && !hasFailedUploads;
   const resetUploadState = () => {
     setUploadItems([]);
     setCompletedParts([]);
@@ -181,32 +202,9 @@ export default function RecordingRoomPage() {
         : "Guests can record locally after joining, but only the host can start the session live.";
 
   useEffect(() => {
-    if (!sessionId || !viewer) {
-      setStoredChunkCount(0);
-      return;
-    }
-
-    let cancelled = false;
-
-    const syncStoredChunkCount = async () => {
-      try {
-        const chunks = await listChunks(sessionId, viewer.userId);
-        if (!cancelled) {
-          setStoredChunkCount(chunks.length);
-        }
-      } catch {
-        if (!cancelled) {
-          setStoredChunkCount(0);
-        }
-      }
-    };
-
-    void syncStoredChunkCount();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionId, viewer]);
+    resetUploadState();
+    void refreshStoredChunkCount();
+  }, [refreshStoredChunkCount]);
 
   useEffect(() => {
     void startMedia();
@@ -415,6 +413,7 @@ export default function RecordingRoomPage() {
         isUploadActive={isUploadActive}
         canStartRecording={Boolean(viewer && sessionId) && !hasFailedUploads && !hasRecoverableChunks}
         canUploadChunks={!hasFailedUploads}
+        hasUploadableChunks={hasStoredChunks}
         startLabel={isHost ? "Start session and record" : "Start local recording"}
         helperText={recordingHelperText}
         durationLabel={durationLabel}

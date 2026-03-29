@@ -7,6 +7,7 @@ interface RecordingControlsProps {
   isUploadActive: boolean;
   canStartRecording: boolean;
   canUploadChunks: boolean;
+  hasUploadableChunks: boolean;
   startLabel: string;
   helperText?: string;
   durationLabel: string;
@@ -21,6 +22,7 @@ export function RecordingControls({
   isUploadActive,
   canStartRecording,
   canUploadChunks,
+  hasUploadableChunks,
   startLabel,
   helperText,
   durationLabel,
@@ -51,7 +53,7 @@ export function RecordingControls({
         <Button
           variant="ghost"
           onClick={onSave}
-          disabled={!canUploadChunks || isRecording || isProcessing || isUploadActive}
+          disabled={!canUploadChunks || !hasUploadableChunks || isRecording || isProcessing || isUploadActive}
           size="md"
         >
           Upload chunks
