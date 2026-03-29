@@ -13,6 +13,12 @@ import type { ISessionRepository } from "../repositories/ISessionRepository.js";
 import type { ITrackRepository } from "../repositories/ITrackRepository.js";
 import type { IUploadTargetRepository } from "../repositories/IUploadTargetRepository.js";
 import type { IStorageProvider } from "../storage/storageProvider.js";
+import {
+  InvalidUploadPartsError,
+  SessionConflictError,
+  UploadOwnershipError,
+  UploadTargetSessionMismatchError
+} from "./errors.js";
 
 function createSession(overrides: Partial<Session> = {}): Session {
   return {
@@ -227,7 +233,7 @@ test("requestUploadUrls rejects duplicate active uploads for the same participan
 
   await assert.rejects(
     service.requestUploadUrls("session-1", "guest-1", 1),
-    /already in progress/
+    (error: unknown) => error instanceof SessionConflictError && /already in progress/.test((error as Error).message)
   );
   assert.equal(storageCalled, false);
 });
@@ -377,7 +383,7 @@ test("completeUpload rejects uploads that do not belong to the authenticated use
 
   await assert.rejects(
     service.completeUpload("session-1", "upload-1", [{ partNumber: 1, etag: "etag-1" }], "guest-2"),
-    /authenticated user/
+    (error: unknown) => error instanceof UploadOwnershipError && /authenticated user/.test((error as Error).message)
   );
   assert.equal(storageCompleted, false);
 });
@@ -399,7 +405,9 @@ test("completeUpload rejects upload targets from a different session", async () 
 
   await assert.rejects(
     service.completeUpload("session-1", "upload-1", [{ partNumber: 1, etag: "etag-1" }], "guest-1"),
-    /does not belong to session/
+    (error: unknown) =>
+      error instanceof UploadTargetSessionMismatchError &&
+      /does not belong to session/.test((error as Error).message)
   );
 });
 
@@ -466,6 +474,8 @@ test("completeUpload rejects malformed multipart part lists", async () => {
       ],
       "guest-1"
     ),
-    /unique|contiguous|count/
+    (error: unknown) =>
+      error instanceof InvalidUploadPartsError &&
+      /unique|contiguous|count/.test((error as Error).message)
   );
 });

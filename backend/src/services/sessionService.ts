@@ -16,9 +16,16 @@ import { IMetrics, PrometheusMetrics } from "../config/metrics.js";
 import { env } from "../config/env.js";
 import { StorageObjectNotFoundError, StorageProviderError } from "../storage/errors.js";
 import {
+  InvalidUploadPartsError,
   RecordingNotFoundError,
   RecordingUrlGenerationError,
-  SessionNotFoundError
+  SessionConflictError,
+  SessionNotFoundError,
+  UploadOwnershipError,
+  UploadTargetExpiredError,
+  UploadTargetNotFoundError,
+  UploadTargetSessionMismatchError,
+  UploadTrackNotFoundError
 } from "./errors.js";
 
 const RECORDING_URL_TTL_SECONDS = 60 * 60;
@@ -26,15 +33,15 @@ const UPLOAD_TARGET_TTL_SECONDS = RECORDING_URL_TTL_SECONDS;
 
 function normalizeMultipartParts(parts: UploadedParts, expectedPartCount: number): UploadedParts {
   if (!Number.isInteger(expectedPartCount) || expectedPartCount < 1) {
-    throw new Error("Invalid upload target part count");
+    throw new InvalidUploadPartsError("Invalid upload target part count");
   }
 
   if (!Array.isArray(parts) || parts.length === 0) {
-    throw new Error("Upload parts are required");
+    throw new InvalidUploadPartsError("Upload parts are required");
   }
 
   if (parts.length !== expectedPartCount) {
-    throw new Error("Upload part count does not match the expected count");
+    throw new InvalidUploadPartsError("Upload part count does not match the expected count");
   }
 
   const normalizedParts = [...parts].sort((a, b) => a.partNumber - b.partNumber);
@@ -42,16 +49,16 @@ function normalizeMultipartParts(parts: UploadedParts, expectedPartCount: number
 
   normalizedParts.forEach((part, index) => {
     if (!Number.isInteger(part.partNumber) || part.partNumber < 1 || part.partNumber > expectedPartCount) {
-      throw new Error("Upload part number is invalid");
+      throw new InvalidUploadPartsError("Upload part number is invalid");
     }
 
     if (seenPartNumbers.has(part.partNumber)) {
-      throw new Error("Upload parts must be unique");
+      throw new InvalidUploadPartsError("Upload parts must be unique");
     }
     seenPartNumbers.add(part.partNumber);
 
     if (part.partNumber !== index + 1) {
-      throw new Error("Upload parts must be contiguous and start at 1");
+      throw new InvalidUploadPartsError("Upload parts must be contiguous and start at 1");
     }
   });
 
@@ -176,7 +183,7 @@ export class SessionService implements ISessionService {
           event: "upload_request_session_not_found",
           sessionId,
         }, "Session not found for upload request");
-        throw new Error("Session not found");
+        throw new SessionNotFoundError(sessionId);
       }
 
       const [existingUploadTargets, incompleteTracks] = await Promise.all([
@@ -201,7 +208,7 @@ export class SessionService implements ISessionService {
           },
           "Upload request rejected because an active upload already exists for this participant"
         );
-        throw new Error("An upload is already in progress for this participant");
+        throw new SessionConflictError("An upload is already in progress for this participant");
       }
 
       const staleUploadTargets = existingUploadTargets.filter((target) => staleTrackKeys.has(target.key));
@@ -331,7 +338,7 @@ export class SessionService implements ISessionService {
           sessionId,
           uploadId,
         }, "Session not found for upload completion");
-        throw new Error("Session not found");
+        throw new SessionNotFoundError(sessionId);
       }
 
       const uploadTarget = await this.uploadTargetRepository.findByUploadId(uploadId);
@@ -341,7 +348,7 @@ export class SessionService implements ISessionService {
           sessionId,
           uploadId
         }, "Upload target not found for upload completion");
-        throw new Error("Upload target not found");
+        throw new UploadTargetNotFoundError(uploadId);
       }
 
       if (uploadTarget.sessionId !== sessionId) {
@@ -351,7 +358,7 @@ export class SessionService implements ISessionService {
           uploadId,
           targetSessionId: uploadTarget.sessionId
         }, "Upload target does not belong to session");
-        throw new Error("Upload target does not belong to session");
+        throw new UploadTargetSessionMismatchError(sessionId, uploadId);
       }
 
       if (uploadTarget.expiresAt < new Date()) {
@@ -361,7 +368,7 @@ export class SessionService implements ISessionService {
           uploadId,
           expiresAt: uploadTarget.expiresAt
         }, "Upload target expired before completion");
-        throw new Error("Upload target expired");
+        throw new UploadTargetExpiredError(uploadId);
       }
 
       const track = session.tracks.find((existingTrack) => existingTrack.objectKey === uploadTarget.key);
@@ -371,7 +378,7 @@ export class SessionService implements ISessionService {
           sessionId,
           uploadId
         }, "Track missing for upload completion");
-        throw new Error("Track missing for upload completion");
+        throw new UploadTrackNotFoundError(uploadId);
       }
 
       if (track.userId !== uploaderId) {
@@ -382,7 +389,7 @@ export class SessionService implements ISessionService {
           uploaderId,
           trackUserId: track.userId
         }, "Upload target does not belong to the authenticated user");
-        throw new Error("Upload target does not belong to the authenticated user");
+        throw new UploadOwnershipError(uploadId);
       }
 
       const normalizedParts = normalizeMultipartParts(parts ?? [], uploadTarget.partCount);

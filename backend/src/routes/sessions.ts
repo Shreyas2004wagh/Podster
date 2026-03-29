@@ -157,9 +157,16 @@ import { SessionRole } from "../models/session.js";
 import { env } from "../config/env.js";
 import { resolve, TOKENS } from "../container/container.js";
 import {
+  InvalidUploadPartsError,
   RecordingNotFoundError,
   RecordingUrlGenerationError,
-  SessionNotFoundError
+  SessionConflictError,
+  SessionNotFoundError,
+  UploadOwnershipError,
+  UploadTargetExpiredError,
+  UploadTargetNotFoundError,
+  UploadTargetSessionMismatchError,
+  UploadTrackNotFoundError
 } from "../services/errors.js";
 
 const createSessionSchema = z.object({
@@ -218,6 +225,42 @@ function parseJwtTtlToSeconds(value: string): number {
     default:
       return amount;
   }
+}
+
+function getErrorStatusCode(error: unknown) {
+  if (
+    error instanceof SessionNotFoundError ||
+    error instanceof RecordingNotFoundError ||
+    error instanceof UploadTargetNotFoundError ||
+    error instanceof UploadTrackNotFoundError
+  ) {
+    return 404;
+  }
+
+  if (error instanceof SessionConflictError) {
+    return 409;
+  }
+
+  if (error instanceof UploadTargetExpiredError) {
+    return 410;
+  }
+
+  if (
+    error instanceof UploadOwnershipError ||
+    error instanceof UploadTargetSessionMismatchError
+  ) {
+    return 403;
+  }
+
+  if (error instanceof InvalidUploadPartsError) {
+    return 422;
+  }
+
+  if (error instanceof RecordingUrlGenerationError) {
+    return 502;
+  }
+
+  return 400;
 }
 
 export default fp(async (fastify) => {
@@ -366,7 +409,9 @@ export default fp(async (fastify) => {
         reply.send(result);
       } catch (err) {
         request.log.error({ err }, "Failed to request upload URLs");
-        reply.code(400).send({ message: err instanceof Error ? err.message : "Invalid request" });
+        reply
+          .code(getErrorStatusCode(err))
+          .send({ message: err instanceof Error ? err.message : "Invalid request" });
       }
     }
   );
@@ -400,7 +445,9 @@ export default fp(async (fastify) => {
         reply.send(updatedSession);
       } catch (err) {
         request.log.error({ err }, "Failed to complete upload");
-        reply.code(400).send({ message: err instanceof Error ? err.message : "Invalid request" });
+        reply
+          .code(getErrorStatusCode(err))
+          .send({ message: err instanceof Error ? err.message : "Invalid request" });
       }
     }
   );
