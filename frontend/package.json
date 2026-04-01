@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit --incremental false"
+    "typecheck": "tsc --noEmit --incremental false",
+    "test:tooling": "node --test scripts/ensure-next-types.test.mjs"
   },
   "dependencies": {
     "@podster/shared": "workspace:*",
