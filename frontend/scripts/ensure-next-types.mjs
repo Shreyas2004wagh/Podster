@@ -2,15 +2,9 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const frontendRoot = path.resolve(__dirname, "..");
-const appRoot = path.join(frontendRoot, "app");
-const typesRoot = path.join(frontendRoot, ".next", "types", "app");
+const APP_ENTRY_NAMES = new Set(["layout.ts", "layout.tsx", "page.ts", "page.tsx"]);
 
-const appEntryNames = new Set(["layout.ts", "layout.tsx", "page.ts", "page.tsx"]);
-
-async function collectAppEntries(directory) {
+export async function collectAppEntries(directory) {
   const entries = await fs.readdir(directory, { withFileTypes: true });
   const files = [];
 
@@ -21,7 +15,7 @@ async function collectAppEntries(directory) {
       continue;
     }
 
-    if (appEntryNames.has(entry.name)) {
+    if (APP_ENTRY_NAMES.has(entry.name)) {
       files.push(fullPath);
     }
   }
@@ -29,35 +23,51 @@ async function collectAppEntries(directory) {
   return files;
 }
 
-async function ensureStubTypeFile(entryPath) {
+export function toTypeStubPath({ appRoot, typesRoot, entryPath }) {
   const relativeEntryPath = path.relative(appRoot, entryPath);
-  const targetPath = path.join(typesRoot, relativeEntryPath).replace(/\.(tsx|ts)$/, ".ts");
+  return path.join(typesRoot, relativeEntryPath).replace(/\.(tsx|ts)$/, ".ts");
+}
 
+export async function ensureStubTypeFile({ appRoot, typesRoot, entryPath }) {
+  const targetPath = toTypeStubPath({ appRoot, typesRoot, entryPath });
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
 
   try {
     await fs.access(targetPath);
-    return;
+    return targetPath;
   } catch {
-    // File is missing; create a minimal placeholder so tsc can resolve the include.
+    await fs.writeFile(targetPath, "export {};\n", "utf8");
+    return targetPath;
   }
+}
 
-  await fs.writeFile(targetPath, "export {};\n", "utf8");
+export async function createNextTypeStubs(frontendRoot) {
+  const appRoot = path.join(frontendRoot, "app");
+  const nextTypesRoot = path.join(frontendRoot, ".next", "types");
+  const appTypesRoot = path.join(nextTypesRoot, "app");
+  const appEntries = await collectAppEntries(appRoot);
+
+  await fs.mkdir(nextTypesRoot, { recursive: true });
+  await fs.mkdir(appTypesRoot, { recursive: true });
+  await fs.writeFile(path.join(nextTypesRoot, "package.json"), '{ "type": "module" }\n', "utf8");
+
+  const sortedEntries = [...appEntries].sort((left, right) => left.localeCompare(right));
+  for (const entryPath of sortedEntries) {
+    await ensureStubTypeFile({
+      appRoot,
+      typesRoot: appTypesRoot,
+      entryPath
+    });
+  }
 }
 
 async function main() {
-  const appEntries = await collectAppEntries(appRoot);
-
-  await fs.mkdir(path.join(frontendRoot, ".next", "types"), { recursive: true });
-  await fs.rm(typesRoot, { recursive: true, force: true });
-  await fs.mkdir(typesRoot, { recursive: true });
-  await fs.writeFile(
-    path.join(frontendRoot, ".next", "types", "package.json"),
-    '{ "type": "module" }\n',
-    "utf8"
-  );
-
-  await Promise.all(appEntries.map((entryPath) => ensureStubTypeFile(entryPath)));
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const frontendRoot = path.resolve(__dirname, "..");
+  await createNextTypeStubs(frontendRoot);
 }
 
-await main();
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  await main();
+}
