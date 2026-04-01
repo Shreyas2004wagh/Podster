@@ -19,6 +19,18 @@ pnpm dev
 Frontend: http://localhost:3000
 Backend API: http://localhost:4000
 
+## Validation
+
+```bash
+pnpm lint
+pnpm typecheck
+pnpm build
+pnpm --filter @podster/backend test
+pnpm --filter frontend exec playwright test
+```
+
+The frontend `typecheck` command bootstraps placeholder App Router type files before `tsc` runs so clean checkouts do not depend on an existing `.next` build artifact.
+
 ## Environment
 
 Copy `infra/env.example` to `.env` files as needed. Key vars:
