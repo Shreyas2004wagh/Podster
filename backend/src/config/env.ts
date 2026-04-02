@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
+import { parseOptionalBoolean } from "../storage/s3Config.js";
 
 const generatedSecrets = {
   host: randomBytes(32).toString("hex"),
@@ -31,6 +32,21 @@ const envSchema = z.object({
   STORAGE_SECRET_KEY: z.string().default(""),
   STORAGE_BUCKET: z.string().default("podster"),
   STORAGE_PROVIDER: z.enum(["s3", "r2", "local"]).default("s3"),
+  STORAGE_FORCE_PATH_STYLE: z
+    .string()
+    .optional()
+    .transform((value, ctx) => {
+      try {
+        return parseOptionalBoolean(value);
+      } catch (error) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["STORAGE_FORCE_PATH_STYLE"],
+          message: error instanceof Error ? error.message : "Invalid boolean value"
+        });
+        return z.NEVER;
+      }
+    }),
 
   // CORS / cookies
   FRONTEND_ORIGIN: z.string().default("http://localhost:3000"),
