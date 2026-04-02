@@ -232,7 +232,7 @@ export default function RecordingRoomPage() {
         })
       );
       if (message.type === "error") {
-        setUploadError("One or more parts failed to upload. Click Retry failed to try again.");
+        setUploadError(message.message);
       }
     });
     return () => {

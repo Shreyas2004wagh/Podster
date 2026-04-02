@@ -15,6 +15,8 @@ export type UploadWorkerResponse =
 
 const concurrentUploads = 3;
 const maxRetries = 2;
+const MISSING_ETAG_MESSAGE =
+  "Upload succeeded but the storage response did not expose an ETag header. Configure bucket CORS to expose ETag for multipart uploads.";
 
 function uploadChunk(job: { id: string; url: string; blob: Blob }) {
   return new Promise<string>((resolve, reject) => {
@@ -40,7 +42,7 @@ function uploadChunk(job: { id: string; url: string; blob: Blob }) {
 
       const etag = request.getResponseHeader("ETag")?.replace(/"/g, "");
       if (!etag) {
-        reject(new Error("Upload succeeded but the response did not include an ETag"));
+        reject(new Error(MISSING_ETAG_MESSAGE));
         return;
       }
 
