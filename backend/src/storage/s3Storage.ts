@@ -18,6 +18,7 @@ import type {
   IStorageProvider
 } from "./storageProvider.js";
 import { generatePresignedGetUrl } from "./presign.js";
+import { resolveForcePathStyle } from "./s3Config.js";
 
 export class S3StorageProvider implements IStorageProvider {
   private readonly s3: S3Client;
@@ -30,7 +31,11 @@ export class S3StorageProvider implements IStorageProvider {
         accessKeyId: env.STORAGE_ACCESS_KEY,
         secretAccessKey: env.STORAGE_SECRET_KEY
       },
-      forcePathStyle: true // Needed for MinIO
+      forcePathStyle: resolveForcePathStyle({
+        endpoint: env.STORAGE_ENDPOINT || undefined,
+        provider: env.STORAGE_PROVIDER,
+        forcePathStyle: env.STORAGE_FORCE_PATH_STYLE
+      })
     });
   }
 
