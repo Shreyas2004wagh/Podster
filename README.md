@@ -39,6 +39,12 @@ Copy `infra/env.example` to `.env` files as needed. Key vars:
 - `HOST_JWT_SECRET`, `GUEST_JWT_SECRET` - JWT signing secrets
 - `STORAGE_*` - S3/R2-compatible settings for signed URLs
 
+### Storage notes
+
+- Multipart uploads require the bucket CORS policy to expose the `ETag` response header.
+- Use `backend/scripts/configure-cors.ts` to apply a matching bucket CORS rule for the configured `FRONTEND_ORIGIN`.
+- `STORAGE_FORCE_PATH_STYLE` should usually stay empty unless you are targeting a local S3-compatible endpoint such as MinIO.
+
 ## Architecture notes
 
 - **Separation of concerns**: WebRTC signaling/client kept in its own module; recording pipeline is local-only.
