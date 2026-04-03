@@ -31,11 +31,11 @@ export async function saveChunk(sessionId: string, chunk: Omit<StoredChunk, "ses
   return new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readwrite");
     tx.onerror = () => {
-      console.error("IndexedDB: Transaction error", tx.error);
+      db.close();
       reject(tx.error);
     };
     tx.oncomplete = () => {
-      console.log(`IndexedDB: Chunk saved for session ${sessionId}`);
+      db.close();
       resolve();
     };
     tx.objectStore(STORE_NAME).put({ sessionId, ...chunk });
@@ -46,12 +46,19 @@ export async function listChunks(sessionId: string, userId: string): Promise<Sto
   const db = await getDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readonly");
-    tx.onerror = () => reject(tx.error);
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error);
+    };
     const store = tx.objectStore(STORE_NAME);
     const request = store.getAll(IDBKeyRange.bound([sessionId, userId, 0], [sessionId, userId, Infinity]));
+    request.onerror = () => {
+      db.close();
+      reject(request.error);
+    };
     request.onsuccess = () => {
       const items = (request.result as StoredChunk[]).sort((a, b) => a.partNumber - b.partNumber);
-      console.log(`IndexedDB: listed ${items.length} chunks for session ${sessionId} and user ${userId}`);
+      db.close();
       resolve(items);
     };
   });
@@ -61,12 +68,22 @@ export async function clearChunks(sessionId: string, userId: string) {
   const db = await getDb();
   return new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readwrite");
-    tx.onerror = () => reject(tx.error);
-    tx.oncomplete = () => resolve();
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error);
+    };
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
     const store = tx.objectStore(STORE_NAME);
     const request = store.openCursor(
       IDBKeyRange.bound([sessionId, userId, 0], [sessionId, userId, Infinity])
     );
+    request.onerror = () => {
+      db.close();
+      reject(request.error);
+    };
     request.onsuccess = () => {
       const cursor = request.result;
       if (cursor) {
