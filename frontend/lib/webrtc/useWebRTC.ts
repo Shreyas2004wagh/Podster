@@ -29,8 +29,11 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
     const signaling = useRef<SignalingClient | null>(null);
     const peers = useRef<Map<string, RTCPeerConnection>>(new Map());
     const participantMeta = useRef<Map<string, ParticipantMeta>>(new Map());
+    const pendingIceCandidates = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
+    const disconnectTimers = useRef<Map<string, number>>(new Map());
     const streamRef = useRef<MediaStream | null>(stream);
     const [remoteParticipants, setRemoteParticipants] = useState<RemoteParticipant[]>([]);
+    const [signalingError, setSignalingError] = useState<string | null>(null);
 
     const rememberParticipant = useCallback((id: string, meta?: Partial<ParticipantMeta> | null) => {
         if (!meta) return;
@@ -65,12 +68,30 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
     }, [getParticipantMeta]);
 
     const removeParticipant = useCallback((id: string) => {
+        const disconnectTimer = disconnectTimers.current.get(id);
+        if (disconnectTimer) {
+            window.clearTimeout(disconnectTimer);
+            disconnectTimers.current.delete(id);
+        }
         setRemoteParticipants((prev) => prev.filter((p) => p.id !== id));
         participantMeta.current.delete(id);
+        pendingIceCandidates.current.delete(id);
         const pc = peers.current.get(id);
         if (pc) {
             pc.close();
             peers.current.delete(id);
+        }
+    }, []);
+
+    const flushPendingIceCandidates = useCallback(async (id: string, pc: RTCPeerConnection) => {
+        const queued = pendingIceCandidates.current.get(id);
+        if (!queued?.length || !pc.remoteDescription) {
+            return;
+        }
+
+        pendingIceCandidates.current.delete(id);
+        for (const candidate of queued) {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
         }
     }, []);
 
@@ -127,7 +148,7 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
         // Handle ICE candidates
         pc.onicecandidate = (event) => {
             if (event.candidate) {
-                signaling.current?.sendIceCandidate(targetId, event.candidate);
+                signaling.current?.sendIceCandidate(targetId, event.candidate.toJSON());
             }
         };
 
@@ -139,7 +160,26 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
         };
 
         pc.onconnectionstatechange = () => {
-            if (pc.connectionState === "disconnected" || pc.connectionState === "failed" || pc.connectionState === "closed") {
+            const disconnectTimer = disconnectTimers.current.get(targetId);
+            if (disconnectTimer && pc.connectionState !== "disconnected") {
+                window.clearTimeout(disconnectTimer);
+                disconnectTimers.current.delete(targetId);
+            }
+
+            if (pc.connectionState === "disconnected") {
+                if (!disconnectTimers.current.has(targetId)) {
+                    const timer = window.setTimeout(() => {
+                        disconnectTimers.current.delete(targetId);
+                        if (pc.connectionState === "disconnected") {
+                            removeParticipant(targetId);
+                        }
+                    }, 5_000);
+                    disconnectTimers.current.set(targetId, timer);
+                }
+                return;
+            }
+
+            if (pc.connectionState === "failed" || pc.connectionState === "closed") {
                 removeParticipant(targetId);
             }
         };
@@ -173,13 +213,12 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
         rememberParticipant(data.from, data.user);
         const pc = createPeerConnection(data.from, false);
         await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-
-        // Add pending inputs if needed? (Already added in createPeerConnection if stream exists)
+        await flushPendingIceCandidates(data.from, pc);
 
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         signaling.current?.sendAnswer(data.from, answer);
-    }, [createPeerConnection, rememberParticipant]);
+    }, [createPeerConnection, flushPendingIceCandidates, rememberParticipant]);
 
     const handleAnswer = useCallback(async (data: {
         from: string;
@@ -190,8 +229,9 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
         const pc = peers.current.get(data.from);
         if (pc) {
             await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+            await flushPendingIceCandidates(data.from, pc);
         }
-    }, [rememberParticipant]);
+    }, [flushPendingIceCandidates, rememberParticipant]);
 
     const handleCandidate = useCallback(async (data: {
         from: string;
@@ -199,11 +239,17 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
         user?: ParticipantMeta;
     }) => {
         rememberParticipant(data.from, data.user);
-        const pc = peers.current.get(data.from);
+        const pc = peers.current.get(data.from) ?? createPeerConnection(data.from, false);
+        if (!pc.remoteDescription) {
+            const queued = pendingIceCandidates.current.get(data.from) ?? [];
+            queued.push(data.candidate);
+            pendingIceCandidates.current.set(data.from, queued);
+            return;
+        }
         if (pc) {
             await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
         }
-    }, [rememberParticipant]);
+    }, [createPeerConnection, rememberParticipant]);
 
     const handleUserJoined = useCallback((data: { socketId: string; user?: ParticipantMeta }) => {
         rememberParticipant(data.socketId, data.user);
@@ -218,13 +264,20 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
         removeParticipant(data.socketId);
     }, [removeParticipant]);
 
+    const handleRoomError = useCallback((data: { message: string }) => {
+        setSignalingError(data.message);
+    }, []);
+
     useEffect(() => {
         if (!sessionId) return;
 
+        setSignalingError(null);
         const client = new SignalingClient({ sessionId });
         signaling.current = client;
 
-        const handleConnect = () => console.log("WebRTC: connected to signaling");
+        const handleConnect = () => {
+            setSignalingError(null);
+        };
 
         client.on("connect", handleConnect);
         client.on("user-joined", handleUserJoined);
@@ -232,6 +285,7 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
         client.on("offer", handleOffer);
         client.on("answer", handleAnswer);
         client.on("ice-candidate", handleCandidate);
+        client.on("room-error", handleRoomError);
 
         client.connect();
 
@@ -242,13 +296,17 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
             client.off("offer", handleOffer);
             client.off("answer", handleAnswer);
             client.off("ice-candidate", handleCandidate);
+            client.off("room-error", handleRoomError);
             client.disconnect();
             peers.current.forEach((pc) => pc.close());
             peers.current.clear();
             participantMeta.current.clear();
+            pendingIceCandidates.current.clear();
+            disconnectTimers.current.forEach((timer) => window.clearTimeout(timer));
+            disconnectTimers.current.clear();
             setRemoteParticipants([]);
         };
-    }, [sessionId, handleUserJoined, handleUserLeft, handleOffer, handleAnswer, handleCandidate]);
+    }, [sessionId, handleUserJoined, handleUserLeft, handleOffer, handleAnswer, handleCandidate, handleRoomError]);
 
     useEffect(() => {
         streamRef.current = stream;
@@ -257,5 +315,5 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
         });
     }, [stream, syncPeerConnectionTracks]);
 
-    return { remoteParticipants };
+    return { remoteParticipants, signalingError };
 }

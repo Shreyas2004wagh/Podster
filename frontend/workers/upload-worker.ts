@@ -18,6 +18,14 @@ const maxRetries = 2;
 const MISSING_ETAG_MESSAGE =
   "Upload succeeded but the storage response did not expose an ETag header. Configure bucket CORS to expose ETag for multipart uploads.";
 
+function isRetryableUploadError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return true;
+  }
+
+  return error.message !== MISSING_ETAG_MESSAGE && error.message !== "Upload aborted";
+}
+
 function uploadChunk(job: { id: string; url: string; blob: Blob }) {
   return new Promise<string>((resolve, reject) => {
     const request = new XMLHttpRequest();
@@ -73,6 +81,10 @@ self.onmessage = async (event: MessageEvent<UploadWorkerMessage>) => {
             return;
           } catch (err) {
             lastError = err as Error;
+            if (!isRetryableUploadError(err) || attempt === maxRetries) {
+              break;
+            }
+
             const delay = 500 * Math.pow(2, attempt);
             await new Promise((resolve) => setTimeout(resolve, delay));
             attempt += 1;

@@ -108,6 +108,10 @@ export default fp(async (fastify) => {
             socket.to(sessionId).emit("user-left", { socketId: socket.id });
         };
 
+        const emitRoomError = (message: string) => {
+            socket.emit("room-error", { message });
+        };
+
         const buildUserPayload = (): SignalingUserPayload | null => {
             const user = (socket.data as SocketSessionData).user;
             if (!user) {
@@ -126,22 +130,27 @@ export default fp(async (fastify) => {
 
             try {
                 if (!sessionId || typeof sessionId !== "string") {
-                    throw new Error("Invalid session id");
+                    emitRoomError("Invalid session id");
+                    return;
                 }
                 const sessionData = socket.data as SocketSessionData;
                 const user = sessionData.user;
                 if (!user) {
-                    throw new Error("Unauthorized");
+                    emitRoomError("Authentication is required before joining a room");
+                    return;
                 }
                 const session = await sessionService.getSession(sessionId);
                 if (!session) {
-                    throw new Error("Session not found");
+                    emitRoomError("Session not found");
+                    return;
                 }
                 if (user.role === SessionRole.Host && user.sub !== session.hostId) {
-                    throw new Error("Host token does not match session");
+                    emitRoomError("Host token does not match session");
+                    return;
                 }
                 if (user.role === SessionRole.Guest && user.sessionId !== sessionId) {
-                    throw new Error("Guest token does not match session");
+                    emitRoomError("Guest token does not match session");
+                    return;
                 }
 
                 if (sessionData.sessionId === sessionId) {
@@ -166,8 +175,8 @@ export default fp(async (fastify) => {
 
                 fastify.log.info({ socketId: socket.id, sessionId }, "Joined room");
             } catch (e) {
-                fastify.log.error({ err: e }, "Socket auth failed");
-                socket.disconnect();
+                fastify.log.error({ err: e, socketId: socket.id, sessionId }, "Socket room join failed");
+                emitRoomError("Failed to join the session room");
             }
         });
 

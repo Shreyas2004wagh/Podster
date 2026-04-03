@@ -55,7 +55,7 @@ export default function RecordingRoomPage() {
     error: mediaError,
   } = useLocalMedia({ video: true, audio: true });
 
-  const { remoteParticipants } = useWebRTC({
+  const { remoteParticipants, signalingError } = useWebRTC({
     sessionId,
     stream: stream ?? null,
   });
@@ -422,8 +422,8 @@ export default function RecordingRoomPage() {
         onSave={handleUpload}
       />
 
-      {(mediaError || lastError) && (
-        <p className="text-sm text-red-200">{mediaError ?? lastError}</p>
+      {(mediaError || lastError || signalingError) && (
+        <p className="text-sm text-red-200">{mediaError ?? lastError ?? signalingError}</p>
       )}
       {!viewer && (
         <p className="text-sm text-amber-200">
