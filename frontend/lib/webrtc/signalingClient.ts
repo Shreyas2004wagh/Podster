@@ -1,7 +1,56 @@
 import { io, Socket } from "socket.io-client";
 import { env } from "@/lib/env";
 
-type Listener = (payload: any) => void;
+type ParticipantRole = "host" | "guest";
+
+type ParticipantMeta = {
+  name: string;
+  role: ParticipantRole;
+};
+
+type UserJoinedPayload = {
+  socketId: string;
+  user?: ParticipantMeta;
+};
+
+type UserLeftPayload = {
+  socketId: string;
+};
+
+type OfferPayload = {
+  from: string;
+  offer: RTCSessionDescriptionInit;
+  user?: ParticipantMeta;
+};
+
+type AnswerPayload = {
+  from: string;
+  answer: RTCSessionDescriptionInit;
+  user?: ParticipantMeta;
+};
+
+type IceCandidatePayload = {
+  from: string;
+  candidate: RTCIceCandidateInit;
+  user?: ParticipantMeta;
+};
+
+type RoomErrorPayload = {
+  message: string;
+};
+
+type SignalingEventMap = {
+  connect: () => void;
+  disconnect: (reason: string) => void;
+  "user-joined": (payload: UserJoinedPayload) => void;
+  "user-left": (payload: UserLeftPayload) => void;
+  offer: (payload: OfferPayload) => void;
+  answer: (payload: AnswerPayload) => void;
+  "ice-candidate": (payload: IceCandidatePayload) => void;
+  "room-error": (payload: RoomErrorPayload) => void;
+};
+
+type SignalingListener = (...args: never[]) => void;
 
 interface SignalingOptions {
   sessionId: string;
@@ -14,9 +63,6 @@ export class SignalingClient {
   constructor(options: SignalingOptions) {
     this.sessionId = options.sessionId;
 
-    // Connect to backend URL (remove /api/v1 if needed, or assume backend root handles socket.io)
-    // Adjust based on your backend URL structure. 
-    // If NEXT_PUBLIC_API_URL is "http://localhost:4000", socket.io usually looks for /socket.io
     const url = env.NEXT_PUBLIC_API_URL.replace(/\/$/, "");
 
     this.socket = io(url, {
@@ -33,17 +79,7 @@ export class SignalingClient {
 
   private setupListeners() {
     this.socket.on("connect", () => {
-      console.log("Signaling: Connected to socket");
-      // Explicitly join room after connection
       this.socket.emit("join-room", { sessionId: this.sessionId });
-    });
-
-    this.socket.on("connect_error", (err) => {
-      console.error("Signaling: Connection error", err);
-    });
-
-    this.socket.on("disconnect", (reason) => {
-      console.log("Signaling: Disconnected", reason);
     });
   }
 
@@ -54,23 +90,36 @@ export class SignalingClient {
 
   disconnect() {
     if (this.socket.connected) {
-      this.socket.disconnect();
+      this.socket.emit("leave-room");
     }
+    this.socket.removeAllListeners();
+    this.socket.disconnect();
   }
 
-  on(event: string, listener: Listener) {
-    this.socket.on(event, listener);
+  on<EventName extends keyof SignalingEventMap>(
+    event: EventName,
+    listener: SignalingEventMap[EventName]
+  ) {
+    const socket = this.socket as unknown as {
+      on: (eventName: string, eventListener: SignalingListener) => void;
+    };
+    socket.on(event, listener as SignalingListener);
   }
 
-  off(event: string, listener: Listener) {
-    this.socket.off(event, listener);
+  off<EventName extends keyof SignalingEventMap>(
+    event: EventName,
+    listener: SignalingEventMap[EventName]
+  ) {
+    const socket = this.socket as unknown as {
+      off: (eventName: string, eventListener: SignalingListener) => void;
+    };
+    socket.off(event, listener as SignalingListener);
   }
 
-  emit(event: string, payload: any) {
+  emit(event: string, payload: unknown) {
     this.socket.emit(event, payload);
   }
 
-  // Helper methods for WebRTC specific signals
   sendOffer(to: string, offer: RTCSessionDescriptionInit) {
     this.socket.emit("offer", { to, offer });
   }
@@ -79,7 +128,7 @@ export class SignalingClient {
     this.socket.emit("answer", { to, answer });
   }
 
-  sendIceCandidate(to: string, candidate: RTCIceCandidate) {
+  sendIceCandidate(to: string, candidate: RTCIceCandidateInit) {
     this.socket.emit("ice-candidate", { to, candidate });
   }
 
