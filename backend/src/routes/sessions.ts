@@ -162,6 +162,9 @@ import {
   RecordingUrlGenerationError,
   SessionConflictError,
   SessionNotFoundError,
+  TrackNotFoundError,
+  TrackNotUploadedError,
+  TrackSessionMismatchError,
   UploadOwnershipError,
   UploadTargetExpiredError,
   UploadTargetNotFoundError,
@@ -188,11 +191,6 @@ const completeUploadSchema = z.object({
     )
     .default([])
 });
-
-type TokenPayload = {
-  sub: string;
-  role: SessionRole;
-};
 
 type AuthenticatedUser = {
   sub: string;
@@ -231,6 +229,7 @@ function getErrorStatusCode(error: unknown) {
   if (
     error instanceof SessionNotFoundError ||
     error instanceof RecordingNotFoundError ||
+    error instanceof TrackNotFoundError ||
     error instanceof UploadTargetNotFoundError ||
     error instanceof UploadTrackNotFoundError
   ) {
@@ -247,12 +246,13 @@ function getErrorStatusCode(error: unknown) {
 
   if (
     error instanceof UploadOwnershipError ||
-    error instanceof UploadTargetSessionMismatchError
+    error instanceof UploadTargetSessionMismatchError ||
+    error instanceof TrackSessionMismatchError
   ) {
     return 403;
   }
 
-  if (error instanceof InvalidUploadPartsError) {
+  if (error instanceof InvalidUploadPartsError || error instanceof TrackNotUploadedError) {
     return 422;
   }
 
@@ -375,7 +375,9 @@ export default fp(async (fastify) => {
         reply.send(updated);
       } catch (err) {
         request.log.error({ err }, "Failed to mark session live");
-        reply.code(400).send({ message: err instanceof Error ? err.message : "Invalid request" });
+        reply
+          .code(getErrorStatusCode(err))
+          .send({ message: err instanceof Error ? err.message : "Invalid request" });
       }
     }
   );
@@ -476,7 +478,9 @@ export default fp(async (fastify) => {
         reply.send({ url });
       } catch (err) {
         request.log.error({ err }, "Failed to get download URL");
-        reply.code(400).send({ message: err instanceof Error ? err.message : "Invalid request" });
+        reply
+          .code(getErrorStatusCode(err))
+          .send({ message: err instanceof Error ? err.message : "Invalid request" });
       }
     }
   );
@@ -528,23 +532,4 @@ export default fp(async (fastify) => {
 
   fastify.get("/sessions/:id/recording", { preHandler: fastify.authenticateAny }, getRecordingHandler);
   fastify.get("/api/sessions/:id/recording", { preHandler: fastify.authenticateAny }, getRecordingHandler);
-
-  fastify.addHook("preHandler", async (request, reply) => {
-    void reply;
-    // Attach basic role info if token present; endpoint-level guards enforce specifics.
-    const authHeader = request.headers.authorization;
-    const token =
-      authHeader?.startsWith("Bearer ") ? authHeader.replace("Bearer ", "") : request.cookies?.podster_token;
-    if (!token) return;
-    try {
-      const decoded = fastify.jwt.verify<TokenPayload>(token, {
-        key: env.HOST_JWT_SECRET
-      });
-      if (decoded.role === SessionRole.Host) {
-        request.user = { sub: decoded.sub, role: SessionRole.Host };
-      }
-    } catch {
-      // ignore; endpoint-level guards handle auth
-    }
-  });
 });
