@@ -21,9 +21,16 @@ export class UploadWorkerClient {
 
   onMessage(listener: (payload: UploadWorkerResponse) => void) {
     this.listeners.push(listener);
+    return () => {
+      this.listeners = this.listeners.filter((registeredListener) => registeredListener !== listener);
+    };
   }
 
   upload(uploads: UploadJob[]) {
+    if (uploads.length === 0) {
+      return;
+    }
+
     this.worker?.postMessage({
       type: "upload-chunks",
       uploads

@@ -209,7 +209,7 @@ export default function RecordingRoomPage() {
   useEffect(() => {
     void startMedia();
     uploadWorker.current = new UploadWorkerClient();
-    uploadWorker.current.onMessage((message) => {
+    const unsubscribe = uploadWorker.current.onMessage((message) => {
       if (message.type === "pong") return;
 
       setUploadItems((prev) =>
@@ -236,6 +236,7 @@ export default function RecordingRoomPage() {
       }
     });
     return () => {
+      unsubscribe();
       uploadWorker.current?.dispose();
     };
   }, [startMedia]);
