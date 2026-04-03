@@ -21,6 +21,9 @@ import {
   RecordingUrlGenerationError,
   SessionConflictError,
   SessionNotFoundError,
+  TrackNotFoundError,
+  TrackNotUploadedError,
+  TrackSessionMismatchError,
   UploadOwnershipError,
   UploadTargetExpiredError,
   UploadTargetNotFoundError,
@@ -465,7 +468,9 @@ export class SessionService implements ISessionService {
 
   async markLive(sessionId: SessionId) {
     const session = await this.sessionRepository.findById(sessionId);
-    if (!session) throw new Error("Session not found");
+    if (!session) {
+      throw new SessionNotFoundError(sessionId);
+    }
     if (session.status !== SessionStatus.LIVE) {
       await this.sessionRepository.update(sessionId, { status: SessionStatus.LIVE });
     }
@@ -474,9 +479,15 @@ export class SessionService implements ISessionService {
 
   async getDownloadUrl(sessionId: SessionId, trackId: string): Promise<string> {
     const track = await this.trackRepository.findById(trackId);
-    if (!track) throw new Error("Track not found");
-    if (track.sessionId !== sessionId) throw new Error("Track does not belong to session");
-    if (!track.completedAt) throw new Error("Track not uploaded yet");
+    if (!track) {
+      throw new TrackNotFoundError(trackId);
+    }
+    if (track.sessionId !== sessionId) {
+      throw new TrackSessionMismatchError(sessionId, trackId);
+    }
+    if (!track.completedAt) {
+      throw new TrackNotUploadedError(trackId);
+    }
     return this.storage.getSignedDownloadUrl({ key: track.objectKey });
   }
 

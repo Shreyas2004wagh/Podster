@@ -68,3 +68,24 @@ export class RecordingUrlGenerationError extends Error {
     this.cause = cause;
   }
 }
+
+export class TrackNotFoundError extends Error {
+  constructor(trackId: string) {
+    super(`Track not found: ${trackId}`);
+    this.name = "TrackNotFoundError";
+  }
+}
+
+export class TrackSessionMismatchError extends Error {
+  constructor(sessionId: string, trackId: string) {
+    super(`Track ${trackId} does not belong to session ${sessionId}`);
+    this.name = "TrackSessionMismatchError";
+  }
+}
+
+export class TrackNotUploadedError extends Error {
+  constructor(trackId: string) {
+    super(`Track not uploaded yet: ${trackId}`);
+    this.name = "TrackNotUploadedError";
+  }
+}

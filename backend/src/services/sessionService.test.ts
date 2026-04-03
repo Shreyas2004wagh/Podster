@@ -15,7 +15,11 @@ import type { IUploadTargetRepository } from "../repositories/IUploadTargetRepos
 import type { IStorageProvider } from "../storage/storageProvider.js";
 import {
   InvalidUploadPartsError,
+  SessionNotFoundError,
   SessionConflictError,
+  TrackNotFoundError,
+  TrackNotUploadedError,
+  TrackSessionMismatchError,
   UploadOwnershipError,
   UploadTargetSessionMismatchError
 } from "./errors.js";
@@ -477,5 +481,77 @@ test("completeUpload rejects malformed multipart part lists", async () => {
     (error: unknown) =>
       error instanceof InvalidUploadPartsError &&
       /unique|contiguous|count/.test((error as Error).message)
+  );
+});
+
+test("markLive throws a typed not found error when the session is missing", async () => {
+  const service = new SessionService(
+    createSessionRepositoryMock({
+      findById: async () => null
+    }),
+    createTrackRepositoryMock(),
+    createUploadTargetRepositoryMock(),
+    createStorageProviderMock()
+  );
+
+  await assert.rejects(
+    service.markLive("session-missing"),
+    (error: unknown) =>
+      error instanceof SessionNotFoundError &&
+      /session-missing/.test((error as Error).message)
+  );
+});
+
+test("getDownloadUrl throws a typed not found error when the track is missing", async () => {
+  const service = new SessionService(
+    createSessionRepositoryMock(),
+    createTrackRepositoryMock({
+      findById: async () => null
+    }),
+    createUploadTargetRepositoryMock(),
+    createStorageProviderMock()
+  );
+
+  await assert.rejects(
+    service.getDownloadUrl("session-1", "track-missing"),
+    (error: unknown) =>
+      error instanceof TrackNotFoundError &&
+      /track-missing/.test((error as Error).message)
+  );
+});
+
+test("getDownloadUrl throws a typed session mismatch error for tracks from another session", async () => {
+  const service = new SessionService(
+    createSessionRepositoryMock(),
+    createTrackRepositoryMock({
+      findById: async () => createTrack({ sessionId: "session-2", completedAt: new Date("2026-03-17T04:10:00.000Z") })
+    }),
+    createUploadTargetRepositoryMock(),
+    createStorageProviderMock()
+  );
+
+  await assert.rejects(
+    service.getDownloadUrl("session-1", "track-1"),
+    (error: unknown) =>
+      error instanceof TrackSessionMismatchError &&
+      /session-1/.test((error as Error).message)
+  );
+});
+
+test("getDownloadUrl throws a typed pending upload error for incomplete tracks", async () => {
+  const service = new SessionService(
+    createSessionRepositoryMock(),
+    createTrackRepositoryMock({
+      findById: async () => createTrack({ completedAt: null })
+    }),
+    createUploadTargetRepositoryMock(),
+    createStorageProviderMock()
+  );
+
+  await assert.rejects(
+    service.getDownloadUrl("session-1", "track-1"),
+    (error: unknown) =>
+      error instanceof TrackNotUploadedError &&
+      /track-1/.test((error as Error).message)
   );
 });
