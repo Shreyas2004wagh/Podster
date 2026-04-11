@@ -9,8 +9,16 @@ interface UseMediaRecorderOptions {
   onStop?: () => void;
 }
 
+function getMediaRecorderConstructor() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return typeof window.MediaRecorder === "undefined" ? null : window.MediaRecorder;
+}
+
 function getRecorderErrorMessage(error: unknown) {
-  if (error instanceof DOMException) {
+  if (typeof DOMException !== "undefined" && error instanceof DOMException) {
     switch (error.name) {
       case "NotSupportedError":
         return "Recording is not supported with the current browser media format.";
@@ -46,7 +54,7 @@ export function useMediaRecorder({
   const shouldNotifyOnStop = useRef(false);
   const hasChunkPersistenceFailure = useRef(false);
 
-  const canRecord = useMemo(() => typeof window !== "undefined" && !!MediaRecorder, []);
+  const canRecord = useMemo(() => getMediaRecorderConstructor() !== null, []);
 
   useEffect(() => {
     return () => {
@@ -74,14 +82,27 @@ export function useMediaRecorder({
     hasChunkPersistenceFailure.current = false;
     shouldNotifyOnStop.current = true;
 
+    const MediaRecorderConstructor = getMediaRecorderConstructor();
+    if (!MediaRecorderConstructor) {
+      setLastError("Recording is not supported in this browser.");
+      setStartedAt(null);
+      setIsRecording(false);
+      setIsProcessing(false);
+      shouldNotifyOnStop.current = false;
+      return false;
+    }
+
     let mimeType = RECORDING_MIME_TYPE;
-    if (!MediaRecorder.isTypeSupported(mimeType)) {
+    if (
+      typeof MediaRecorderConstructor.isTypeSupported === "function" &&
+      !MediaRecorderConstructor.isTypeSupported(mimeType)
+    ) {
       mimeType = "";
     }
 
     let recorder: MediaRecorder;
     try {
-      recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      recorder = new MediaRecorderConstructor(stream, mimeType ? { mimeType } : undefined);
     } catch (err) {
       setLastError(`Failed to create recorder: ${getRecorderErrorMessage(err)}`);
       setStartedAt(null);

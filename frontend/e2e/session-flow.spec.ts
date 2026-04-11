@@ -109,6 +109,31 @@ test("guest can join a session and land in the recording room", async ({ page })
   await expect(page.getByRole("button", { name: /start local recording/i })).toBeEnabled();
 });
 
+test("recording room stays usable when MediaRecorder is unavailable", async ({ page }) => {
+  const sessionId = "session-no-media-recorder";
+
+  await page.addInitScript(({ viewer }) => {
+    window.localStorage.setItem(viewer.key, JSON.stringify(viewer.value));
+    Object.defineProperty(window, "MediaRecorder", {
+      value: undefined,
+      configurable: true
+    });
+  }, {
+    viewer: seedViewer(sessionId, {
+      sessionId,
+      userId: "host-1",
+      role: "host",
+      name: "Host"
+    })
+  });
+
+  await page.goto(`/sessions/${sessionId}/record`);
+
+  await expect(page.getByRole("heading", { name: `Session ${sessionId}` })).toBeVisible();
+  await expect(page.getByRole("button", { name: /start session and record/i })).toBeVisible();
+  await expect(page.getByText(/participant identity is missing in this browser/i)).toHaveCount(0);
+});
+
 test("host notes persist into the recording room and survive a reload", async ({ page }) => {
   await page.route("**/sessions", async (route) => {
     if (route.request().method() !== "POST") {
