@@ -466,11 +466,15 @@ export default fp(async (fastify) => {
           return;
         }
         const user = request.user as AuthenticatedUser | undefined;
-        if (user?.role === SessionRole.Guest && user.sessionId !== params.id) {
+        if (!user) {
+          reply.code(401).send({ message: "Authentication required" });
+          return;
+        }
+        if (user.role === SessionRole.Guest && user.sessionId !== params.id) {
           reply.code(403).send({ message: "Forbidden" });
           return;
         }
-        if (user?.role === SessionRole.Host && user.sub !== session.hostId) {
+        if (user.role === SessionRole.Host && user.sub !== session.hostId) {
           reply.code(403).send({ message: "Forbidden" });
           return;
         }
