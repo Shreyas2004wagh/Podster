@@ -31,6 +31,16 @@ export default function RecordingRoomPage() {
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadId, setUploadId] = useState<string | null>(null);
+  const getUploadWorkerError = useCallback(() => {
+    if (uploadWorker.current?.isAvailable()) {
+      return null;
+    }
+
+    return (
+      uploadWorker.current?.getInitializationError() ??
+      "Background uploads are unavailable in this browser."
+    );
+  }, []);
 
   useEffect(() => {
     if (!sessionId) {
@@ -79,6 +89,14 @@ export default function RecordingRoomPage() {
     },
     [sessionId, viewer]
   );
+  const loadStoredChunksForUpload = useCallback(
+    async (targetViewer: ViewerSession) => {
+      const chunks = await listChunks(sessionId, targetViewer.userId);
+      setStoredChunkCount(chunks.length);
+      return chunks;
+    },
+    [sessionId]
+  );
 
   async function handleUpload() {
     if (preparingUploadRef.current || isUploadActive) {
@@ -105,6 +123,11 @@ export default function RecordingRoomPage() {
         setUploadError("Missing session id.");
         return;
       }
+      const uploadWorkerError = getUploadWorkerError();
+      if (uploadWorkerError) {
+        setUploadError(uploadWorkerError);
+        return;
+      }
 
       if (lastError) {
         setUploadError(lastError);
@@ -112,7 +135,7 @@ export default function RecordingRoomPage() {
         return;
       }
 
-      const chunks = await refreshStoredChunkCount(viewer);
+      const chunks = await loadStoredChunksForUpload(viewer);
       if (!chunks.length) {
         setUploadError("No recorded chunks found in IndexedDB.");
         return;
@@ -208,8 +231,13 @@ export default function RecordingRoomPage() {
 
   useEffect(() => {
     void startMedia();
-    uploadWorker.current = new UploadWorkerClient();
-    const unsubscribe = uploadWorker.current.onMessage((message) => {
+    const client = new UploadWorkerClient();
+    uploadWorker.current = client;
+    const workerError = client.getInitializationError();
+    if (workerError) {
+      setUploadError((currentError) => currentError ?? workerError);
+    }
+    const unsubscribe = client.onMessage((message) => {
       if (message.type === "pong") return;
 
       setUploadItems((prev) =>
@@ -371,6 +399,11 @@ export default function RecordingRoomPage() {
       uploadItems.filter((item) => item.status === "error").map((item) => item.id)
     );
     if (failedIds.size === 0) return;
+    const uploadWorkerError = getUploadWorkerError();
+    if (uploadWorkerError) {
+      setUploadError(uploadWorkerError);
+      return;
+    }
     setUploadError(null);
     setUploadItems((prev) =>
       prev.map((item) =>
