@@ -1,6 +1,11 @@
 "use client";
 
 import { z } from "zod";
+import {
+  getLocalStorageItem,
+  removeLocalStorageItem,
+  setLocalStorageItem
+} from "@/lib/browser/localStorage";
 
 export interface ViewerSession {
   sessionId: string;
@@ -24,23 +29,24 @@ function getStorageKey(sessionId: string) {
 
 export function saveViewerSession(viewer: ViewerSession) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(getStorageKey(viewer.sessionId), JSON.stringify(viewer));
+  setLocalStorageItem(getStorageKey(viewer.sessionId), JSON.stringify(viewer));
 }
 
 export function getViewerSession(sessionId: string): ViewerSession | null {
   if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(getStorageKey(sessionId));
+  const storageKey = getStorageKey(sessionId);
+  const raw = getLocalStorageItem(storageKey);
   if (!raw) return null;
 
   try {
     const parsed = viewerSessionSchema.safeParse(JSON.parse(raw));
     if (!parsed.success || parsed.data.sessionId !== sessionId) {
-      window.localStorage.removeItem(getStorageKey(sessionId));
+      removeLocalStorageItem(storageKey);
       return null;
     }
     return parsed.data;
   } catch {
-    window.localStorage.removeItem(getStorageKey(sessionId));
+    removeLocalStorageItem(storageKey);
     return null;
   }
 }

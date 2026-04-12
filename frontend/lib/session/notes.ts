@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  getLocalStorageItem,
+  removeLocalStorageItem,
+  setLocalStorageItem
+} from "@/lib/browser/localStorage";
+
 const STORAGE_KEY_PREFIX = "podster.notes.";
 
 function getStorageKey(sessionId: string, userId: string) {
@@ -15,18 +21,18 @@ function normalizeNotes(notes: string) {
 }
 
 function readStoredNotes(storageKey: string) {
-  const raw = window.localStorage.getItem(storageKey);
+  const raw = getLocalStorageItem(storageKey);
   if (!raw) return "";
 
   try {
     const parsed = JSON.parse(raw);
     if (typeof parsed !== "string") {
-      window.localStorage.removeItem(storageKey);
+      removeLocalStorageItem(storageKey);
       return "";
     }
     return normalizeNotes(parsed);
   } catch {
-    window.localStorage.removeItem(storageKey);
+    removeLocalStorageItem(storageKey);
     return "";
   }
 }
@@ -38,14 +44,14 @@ export function saveSessionNotes(sessionId: string, userId: string, notes: strin
   const storageKey = getStorageKey(sessionId, userId);
   const legacyStorageKey = getLegacyStorageKey(sessionId);
 
-  window.localStorage.removeItem(legacyStorageKey);
+  removeLocalStorageItem(legacyStorageKey);
 
   if (!normalizedNotes.trim()) {
-    window.localStorage.removeItem(storageKey);
+    removeLocalStorageItem(storageKey);
     return;
   }
 
-  window.localStorage.setItem(storageKey, JSON.stringify(normalizedNotes));
+  setLocalStorageItem(storageKey, JSON.stringify(normalizedNotes));
 }
 
 export function getSessionNotes(sessionId: string, userId: string) {
@@ -60,8 +66,8 @@ export function getSessionNotes(sessionId: string, userId: string) {
   const legacyStorageKey = getLegacyStorageKey(sessionId);
   const legacyNotes = readStoredNotes(legacyStorageKey);
   if (legacyNotes) {
-    window.localStorage.setItem(storageKey, JSON.stringify(legacyNotes));
-    window.localStorage.removeItem(legacyStorageKey);
+    setLocalStorageItem(storageKey, JSON.stringify(legacyNotes));
+    removeLocalStorageItem(legacyStorageKey);
   }
 
   return legacyNotes;
