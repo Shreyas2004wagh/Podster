@@ -179,7 +179,15 @@ export default function RecordingRoomPage() {
     }
   }
 
-  const { startRecording, stopRecording, isRecording, isProcessing, durationLabel, lastError } =
+  const {
+    startRecording,
+    stopRecording,
+    canRecord,
+    isRecording,
+    isProcessing,
+    durationLabel,
+    lastError,
+  } =
     useMediaRecorder({
       stream,
       sessionId,
@@ -206,6 +214,8 @@ export default function RecordingRoomPage() {
   );
   const hasStoredChunks = storedChunkCount > 0;
   const hasRecoverableChunks = hasStoredChunks && !isUploadActive && !hasFailedUploads;
+  const canStartRecording =
+    Boolean(viewer && sessionId) && !hasFailedUploads && !hasRecoverableChunks && !mediaError && canRecord;
   const resetUploadState = () => {
     setUploadItems([]);
     setCompletedParts([]);
@@ -220,6 +230,10 @@ export default function RecordingRoomPage() {
       ? "Recorded chunks were found locally. Upload or clear them before starting a new take."
     : hasFailedUploads
       ? "Retry or clear the failed upload before starting a new recording."
+      : mediaError
+        ? mediaError
+        : !canRecord
+          ? "This browser cannot record local media with MediaRecorder."
       : isHost
         ? undefined
         : "Guests can record locally after joining, but only the host can start the session live.";
@@ -445,7 +459,7 @@ export default function RecordingRoomPage() {
         isRecording={isRecording}
         isProcessing={isProcessing}
         isUploadActive={isUploadActive}
-        canStartRecording={Boolean(viewer && sessionId) && !hasFailedUploads && !hasRecoverableChunks}
+        canStartRecording={canStartRecording}
         canUploadChunks={!hasFailedUploads}
         hasUploadableChunks={hasStoredChunks}
         startLabel={isHost ? "Start session and record" : "Start local recording"}

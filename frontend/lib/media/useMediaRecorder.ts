@@ -222,6 +222,7 @@ export function useMediaRecorder({
   return {
     startRecording,
     stopRecording,
+    canRecord,
     isRecording,
     isProcessing,
     durationLabel,
