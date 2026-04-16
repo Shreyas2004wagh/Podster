@@ -51,18 +51,23 @@ export class UploadWorkerClient {
   }
 
   upload(uploads: UploadJob[]) {
-    if (uploads.length === 0 || !this.worker) {
+    const worker = this.worker;
+    if (uploads.length === 0 || !worker) {
       return;
     }
 
-    this.worker?.postMessage({
+    worker.postMessage({
       type: "upload-chunks",
       uploads
     } satisfies UploadWorkerMessage);
   }
 
   dispose() {
-    this.worker?.terminate();
+    if (this.worker) {
+      this.worker.onmessage = null;
+      this.worker.terminate();
+      this.worker = null;
+    }
     this.listeners = [];
   }
 }
