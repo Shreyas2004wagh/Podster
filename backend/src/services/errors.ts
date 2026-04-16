@@ -89,3 +89,18 @@ export class TrackNotUploadedError extends Error {
     this.name = "TrackNotUploadedError";
   }
 }
+
+export class TrackStorageMissingError extends Error {
+  constructor(trackId: string) {
+    super(`Stored object missing for track: ${trackId}`);
+    this.name = "TrackStorageMissingError";
+  }
+}
+
+export class DownloadUrlGenerationError extends Error {
+  constructor(trackId: string, cause?: unknown) {
+    super(`Failed to generate download URL for track: ${trackId}`);
+    this.name = "DownloadUrlGenerationError";
+    this.cause = cause;
+  }
+}

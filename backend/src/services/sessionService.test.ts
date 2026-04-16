@@ -13,11 +13,14 @@ import type { ISessionRepository } from "../repositories/ISessionRepository.js";
 import type { ITrackRepository } from "../repositories/ITrackRepository.js";
 import type { IUploadTargetRepository } from "../repositories/IUploadTargetRepository.js";
 import type { IStorageProvider } from "../storage/storageProvider.js";
+import { StorageObjectNotFoundError, StorageProviderError } from "../storage/errors.js";
 import {
+  DownloadUrlGenerationError,
   InvalidUploadPartsError,
   SessionNotFoundError,
   SessionConflictError,
   TrackNotFoundError,
+  TrackStorageMissingError,
   TrackNotUploadedError,
   TrackSessionMismatchError,
   UploadOwnershipError,
@@ -554,4 +557,95 @@ test("getDownloadUrl throws a typed pending upload error for incomplete tracks",
       error instanceof TrackNotUploadedError &&
       /track-1/.test((error as Error).message)
   );
+});
+
+test("getDownloadUrl throws a typed storage-missing error when the uploaded object is gone", async () => {
+  const service = new SessionService(
+    createSessionRepositoryMock(),
+    createTrackRepositoryMock({
+      findById: async () =>
+        createTrack({ completedAt: new Date("2026-03-17T04:10:00.000Z") })
+    }),
+    createUploadTargetRepositoryMock(),
+    createStorageProviderMock({
+      getSignedDownloadUrl: async () => {
+        throw new StorageObjectNotFoundError("sessions/session-1/guest-1/track.webm");
+      }
+    })
+  );
+
+  await assert.rejects(
+    service.getDownloadUrl("session-1", "track-1"),
+    (error: unknown) =>
+      error instanceof TrackStorageMissingError &&
+      /track-1/.test((error as Error).message)
+  );
+});
+
+test("getDownloadUrl throws a typed generation error when storage signing fails", async () => {
+  const service = new SessionService(
+    createSessionRepositoryMock(),
+    createTrackRepositoryMock({
+      findById: async () =>
+        createTrack({ completedAt: new Date("2026-03-17T04:10:00.000Z") })
+    }),
+    createUploadTargetRepositoryMock(),
+    createStorageProviderMock({
+      getSignedDownloadUrl: async () => {
+        throw new StorageProviderError("S3 signing failed");
+      }
+    })
+  );
+
+  await assert.rejects(
+    service.getDownloadUrl("session-1", "track-1"),
+    (error: unknown) =>
+      error instanceof DownloadUrlGenerationError &&
+      /track-1/.test((error as Error).message)
+  );
+});
+
+test("getRecordingUrl picks the newest completed recording by completion time", async () => {
+  const requestedKeys: string[] = [];
+  const service = new SessionService(
+    createSessionRepositoryMock({
+      findByIdWithTracks: async () =>
+        Object.assign(createSession(), {
+          tracks: [
+            createTrack({
+              id: "track-newest",
+              objectKey: "sessions/session-1/guest-1/newest.webm",
+              createdAt: new Date("2026-03-17T04:02:00.000Z"),
+              completedAt: new Date("2026-03-17T04:10:00.000Z")
+            }),
+            createTrack({
+              id: "track-audio",
+              kind: TrackKind.AUDIO,
+              objectKey: "sessions/session-1/guest-1/audio.webm",
+              createdAt: new Date("2026-03-17T04:03:00.000Z"),
+              completedAt: new Date("2026-03-17T04:20:00.000Z")
+            }),
+            createTrack({
+              id: "track-older",
+              objectKey: "sessions/session-1/guest-1/older.webm",
+              createdAt: new Date("2026-03-17T04:05:00.000Z"),
+              completedAt: new Date("2026-03-17T04:06:00.000Z")
+            })
+          ]
+        })
+    }),
+    createTrackRepositoryMock(),
+    createUploadTargetRepositoryMock(),
+    createStorageProviderMock({
+      getSignedDownloadUrl: async ({ key }) => {
+        requestedKeys.push(key);
+        return `https://example.test/download?key=${encodeURIComponent(key)}`;
+      }
+    })
+  );
+
+  const url = await service.getRecordingUrl("session-1");
+
+  assert.equal(requestedKeys[0], "sessions/session-1/guest-1/newest.webm");
+  assert.match(url, /newest\.webm/);
 });

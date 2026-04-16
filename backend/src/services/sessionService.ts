@@ -16,12 +16,14 @@ import { IMetrics, PrometheusMetrics } from "../config/metrics.js";
 import { env } from "../config/env.js";
 import { StorageObjectNotFoundError, StorageProviderError } from "../storage/errors.js";
 import {
+  DownloadUrlGenerationError,
   InvalidUploadPartsError,
   RecordingNotFoundError,
   RecordingUrlGenerationError,
   SessionConflictError,
   SessionNotFoundError,
   TrackNotFoundError,
+  TrackStorageMissingError,
   TrackNotUploadedError,
   TrackSessionMismatchError,
   UploadOwnershipError,
@@ -488,7 +490,34 @@ export class SessionService implements ISessionService {
     if (!track.completedAt) {
       throw new TrackNotUploadedError(trackId);
     }
-    return this.storage.getSignedDownloadUrl({ key: track.objectKey });
+
+    try {
+      return await this.storage.getSignedDownloadUrl({ key: track.objectKey });
+    } catch (error) {
+      if (error instanceof StorageObjectNotFoundError) {
+        throw new TrackStorageMissingError(trackId);
+      }
+
+      this.logger.error(
+        {
+          event: "download_url_generation_failed",
+          sessionId,
+          trackId,
+          objectKey: track.objectKey,
+          error: {
+            name: (error as Error).name,
+            message: (error as Error).message
+          }
+        },
+        "Failed to generate track download URL"
+      );
+
+      if (error instanceof StorageProviderError) {
+        throw new DownloadUrlGenerationError(trackId, error);
+      }
+
+      throw error;
+    }
   }
 
   async getRecordingUrl(sessionId: SessionId): Promise<string> {
@@ -498,7 +527,16 @@ export class SessionService implements ISessionService {
     }
 
     const latestCompletedRecording = [...session.tracks]
-      .reverse()
+      .sort((left, right) => {
+        const leftCompletedAt = left.completedAt ? new Date(left.completedAt).getTime() : 0;
+        const rightCompletedAt = right.completedAt ? new Date(right.completedAt).getTime() : 0;
+
+        if (rightCompletedAt !== leftCompletedAt) {
+          return rightCompletedAt - leftCompletedAt;
+        }
+
+        return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+      })
       .find(
         (track) =>
           track.kind === TrackKind.VIDEO &&

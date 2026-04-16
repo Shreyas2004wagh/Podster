@@ -157,12 +157,14 @@ import { SessionRole } from "../models/session.js";
 import { env } from "../config/env.js";
 import { resolve, TOKENS } from "../container/container.js";
 import {
+  DownloadUrlGenerationError,
   InvalidUploadPartsError,
   RecordingNotFoundError,
   RecordingUrlGenerationError,
   SessionConflictError,
   SessionNotFoundError,
   TrackNotFoundError,
+  TrackStorageMissingError,
   TrackNotUploadedError,
   TrackSessionMismatchError,
   UploadOwnershipError,
@@ -230,6 +232,7 @@ function getErrorStatusCode(error: unknown) {
     error instanceof SessionNotFoundError ||
     error instanceof RecordingNotFoundError ||
     error instanceof TrackNotFoundError ||
+    error instanceof TrackStorageMissingError ||
     error instanceof UploadTargetNotFoundError ||
     error instanceof UploadTrackNotFoundError
   ) {
@@ -256,7 +259,7 @@ function getErrorStatusCode(error: unknown) {
     return 422;
   }
 
-  if (error instanceof RecordingUrlGenerationError) {
+  if (error instanceof RecordingUrlGenerationError || error instanceof DownloadUrlGenerationError) {
     return 502;
   }
 
