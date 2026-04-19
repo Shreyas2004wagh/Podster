@@ -9,6 +9,7 @@ interface ParticipantTileProps {
 export function ParticipantTile({ participant }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaybackBlocked, setIsPlaybackBlocked] = useState(false);
+  const [hasLiveVideoTrack, setHasLiveVideoTrack] = useState(false);
 
   const syncPlayback = useCallback(async () => {
     const video = videoRef.current;
@@ -32,6 +33,52 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       setIsPlaybackBlocked(true);
     }
   }, [participant.isLocal, participant.stream]);
+
+  useEffect(() => {
+    const stream = participant.stream;
+    if (!stream) {
+      setHasLiveVideoTrack(false);
+      return;
+    }
+
+    const updateVideoState = () => {
+      setHasLiveVideoTrack(stream.getVideoTracks().some((track) => track.readyState === "live"));
+    };
+
+    const subscribeTrack = (track: MediaStreamTrack) => {
+      track.addEventListener("ended", updateVideoState);
+      track.addEventListener("unmute", updateVideoState);
+      track.addEventListener("mute", updateVideoState);
+    };
+
+    const unsubscribeTrack = (track: MediaStreamTrack) => {
+      track.removeEventListener("ended", updateVideoState);
+      track.removeEventListener("unmute", updateVideoState);
+      track.removeEventListener("mute", updateVideoState);
+    };
+
+    const handleAddTrack = (event: MediaStreamTrackEvent) => {
+      subscribeTrack(event.track);
+      updateVideoState();
+      void syncPlayback();
+    };
+
+    const handleRemoveTrack = (event: MediaStreamTrackEvent) => {
+      unsubscribeTrack(event.track);
+      updateVideoState();
+    };
+
+    stream.getVideoTracks().forEach(subscribeTrack);
+    stream.addEventListener("addtrack", handleAddTrack);
+    stream.addEventListener("removetrack", handleRemoveTrack);
+    updateVideoState();
+
+    return () => {
+      stream.getVideoTracks().forEach(unsubscribeTrack);
+      stream.removeEventListener("addtrack", handleAddTrack);
+      stream.removeEventListener("removetrack", handleRemoveTrack);
+    };
+  }, [participant.stream, syncPlayback]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -72,15 +119,17 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
             void syncPlayback();
           }}
         />
-        {!participant.stream && (
+        {!hasLiveVideoTrack && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/40 text-center text-sm text-slate-200">
             <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/10 text-lg font-semibold text-white">
               {participant.name.charAt(0).toUpperCase()}
             </div>
-            <div>{participant.isLocal ? "Camera preview unavailable" : "Waiting for video"}</div>
+            <div>
+              {participant.isLocal ? "Camera preview unavailable" : "No live video available"}
+            </div>
           </div>
         )}
-        {participant.stream && isPlaybackBlocked && !participant.isLocal && (
+        {hasLiveVideoTrack && isPlaybackBlocked && !participant.isLocal && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/55">
             <button
               type="button"
