@@ -8,6 +8,7 @@ interface ParticipantTileProps {
 
 export function ParticipantTile({ participant }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const playbackAttemptRef = useRef(0);
   const [isPlaybackBlocked, setIsPlaybackBlocked] = useState(false);
   const [hasLiveVideoTrack, setHasLiveVideoTrack] = useState(false);
 
@@ -26,10 +27,23 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       video.srcObject = participant.stream;
     }
 
+    const playbackAttempt = ++playbackAttemptRef.current;
+    setIsPlaybackBlocked(false);
+
     try {
       await video.play();
-      setIsPlaybackBlocked(false);
-    } catch {
+      if (playbackAttempt === playbackAttemptRef.current) {
+        setIsPlaybackBlocked(false);
+      }
+    } catch (error) {
+      if (playbackAttempt !== playbackAttemptRef.current) {
+        return;
+      }
+
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
+
       setIsPlaybackBlocked(true);
     }
   }, [participant.isLocal, participant.stream]);
@@ -85,6 +99,8 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     if (!video) return;
 
     if (!participant.stream) {
+      playbackAttemptRef.current += 1;
+      video.pause();
       video.srcObject = null;
       setIsPlaybackBlocked(false);
       return;
@@ -93,6 +109,8 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     void syncPlayback();
 
     return () => {
+      playbackAttemptRef.current += 1;
+      video.pause();
       if (video.srcObject === participant.stream) {
         video.srcObject = null;
       }
