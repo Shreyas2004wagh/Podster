@@ -55,17 +55,33 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       return;
     }
 
+    const trackedVideoTracks = new Set<MediaStreamTrack>();
+
     const updateVideoState = () => {
-      setHasLiveVideoTrack(stream.getVideoTracks().some((track) => track.readyState === "live"));
+      setHasLiveVideoTrack(
+        stream
+          .getVideoTracks()
+          .some((track) => track.readyState === "live" && !track.muted)
+      );
     };
 
     const subscribeTrack = (track: MediaStreamTrack) => {
+      if (track.kind !== "video") {
+        return;
+      }
+
+      trackedVideoTracks.add(track);
       track.addEventListener("ended", updateVideoState);
       track.addEventListener("unmute", updateVideoState);
       track.addEventListener("mute", updateVideoState);
     };
 
     const unsubscribeTrack = (track: MediaStreamTrack) => {
+      if (!trackedVideoTracks.has(track)) {
+        return;
+      }
+
+      trackedVideoTracks.delete(track);
       track.removeEventListener("ended", updateVideoState);
       track.removeEventListener("unmute", updateVideoState);
       track.removeEventListener("mute", updateVideoState);
@@ -74,7 +90,10 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     const handleAddTrack = (event: MediaStreamTrackEvent) => {
       subscribeTrack(event.track);
       updateVideoState();
-      void syncPlayback();
+
+      if (event.track.kind === "video") {
+        void syncPlayback();
+      }
     };
 
     const handleRemoveTrack = (event: MediaStreamTrackEvent) => {
@@ -88,7 +107,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     updateVideoState();
 
     return () => {
-      stream.getVideoTracks().forEach(unsubscribeTrack);
+      trackedVideoTracks.forEach(unsubscribeTrack);
       stream.removeEventListener("addtrack", handleAddTrack);
       stream.removeEventListener("removetrack", handleRemoveTrack);
     };
