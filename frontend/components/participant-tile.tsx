@@ -24,6 +24,9 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   const participantInitial = Array.from(participantName)[0]?.toUpperCase() ?? "?";
   const showBlockedPlaybackControl =
     Boolean(participant.stream) && isPlaybackBlocked && !participant.isLocal;
+  const clearBlockedPlayback = useCallback(() => {
+    setIsPlaybackBlocked(false);
+  }, []);
 
   const syncPlayback = useCallback(async () => {
     const video = videoRef.current;
@@ -165,6 +168,8 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
           onLoadedMetadata={() => {
             void syncPlayback();
           }}
+          onPlaying={clearBlockedPlayback}
+          onEmptied={clearBlockedPlayback}
         />
         {!hasLiveVideoTrack && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/40 text-center text-sm text-slate-200">
