@@ -6,11 +6,22 @@ interface ParticipantTileProps {
   participant: Participant;
 }
 
+function getParticipantDisplayName(participant: Participant) {
+  const trimmedName = participant.name.trim();
+  if (trimmedName) {
+    return trimmedName;
+  }
+
+  return participant.isLocal ? "You" : participant.role === "host" ? "Host" : "Guest";
+}
+
 export function ParticipantTile({ participant }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const playbackAttemptRef = useRef(0);
   const [isPlaybackBlocked, setIsPlaybackBlocked] = useState(false);
   const [hasLiveVideoTrack, setHasLiveVideoTrack] = useState(false);
+  const participantName = getParticipantDisplayName(participant);
+  const participantInitial = Array.from(participantName)[0]?.toUpperCase() ?? "?";
 
   const syncPlayback = useCallback(async () => {
     const video = videoRef.current;
@@ -139,7 +150,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 via-white/3 to-white/0 p-4 shadow-lg">
       <div className="mb-3 flex items-center justify-between text-sm text-white/90">
-        <div className="font-semibold">{participant.name}</div>
+        <div className="font-semibold">{participantName}</div>
         <Badge tone={participant.role === "host" ? "success" : "default"}>
           {participant.role}
         </Badge>
@@ -151,7 +162,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
           autoPlay
           muted={participant.isLocal ?? false}
           playsInline
-          aria-label={`${participant.name} video feed`}
+          aria-label={`${participantName} media feed`}
           onLoadedMetadata={() => {
             void syncPlayback();
           }}
@@ -159,7 +170,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
         {!hasLiveVideoTrack && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/40 text-center text-sm text-slate-200">
             <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/10 text-lg font-semibold text-white">
-              {participant.name.charAt(0).toUpperCase()}
+              {participantInitial}
             </div>
             <div>
               {participant.isLocal ? "Camera preview unavailable" : "No live video available"}
