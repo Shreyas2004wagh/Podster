@@ -22,6 +22,8 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   const [hasLiveVideoTrack, setHasLiveVideoTrack] = useState(false);
   const participantName = getParticipantDisplayName(participant);
   const participantInitial = Array.from(participantName)[0]?.toUpperCase() ?? "?";
+  const showBlockedPlaybackControl =
+    Boolean(participant.stream) && isPlaybackBlocked && !participant.isLocal;
 
   const syncPlayback = useCallback(async () => {
     const video = videoRef.current;
@@ -101,10 +103,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     const handleAddTrack = (event: MediaStreamTrackEvent) => {
       subscribeTrack(event.track);
       updateVideoState();
-
-      if (event.track.kind === "video") {
-        void syncPlayback();
-      }
+      void syncPlayback();
     };
 
     const handleRemoveTrack = (event: MediaStreamTrackEvent) => {
@@ -175,9 +174,20 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
             <div>
               {participant.isLocal ? "Camera preview unavailable" : "No live video available"}
             </div>
+            {showBlockedPlaybackControl && (
+              <button
+                type="button"
+                className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/15"
+                onClick={() => {
+                  void syncPlayback();
+                }}
+              >
+                Resume media
+              </button>
+            )}
           </div>
         )}
-        {hasLiveVideoTrack && isPlaybackBlocked && !participant.isLocal && (
+        {hasLiveVideoTrack && showBlockedPlaybackControl && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/55">
             <button
               type="button"
