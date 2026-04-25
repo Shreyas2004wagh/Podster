@@ -255,9 +255,14 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 via-white/3 to-white/0 p-4 shadow-lg">
-      <div className="mb-3 flex items-center justify-between text-sm text-white/90">
-        <div className="font-semibold">{participantName}</div>
-        <Badge tone={participant.role === "host" ? "success" : "default"}>
+      <div className="mb-3 flex items-center justify-between gap-3 text-sm text-white/90">
+        <div className="min-w-0 flex-1 truncate font-semibold" title={participantName}>
+          {participantName}
+        </div>
+        <Badge
+          className="shrink-0"
+          tone={participant.role === "host" ? "success" : "default"}
+        >
           {getParticipantRoleLabel(participant.role)}
         </Badge>
       </div>
