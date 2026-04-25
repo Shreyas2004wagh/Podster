@@ -95,6 +95,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   const [hasLiveVideoTrack, setHasLiveVideoTrack] = useState(false);
   const [isVideoReady, setIsVideoReady] = useState(false);
   const participantName = getParticipantDisplayName(participant);
+  const participantRoleLabel = getParticipantRoleLabel(participant.role);
   const participantInitial = Array.from(participantName)[0]?.toUpperCase() ?? "?";
   const mediaStatus = getParticipantMediaStatus({
     hasStream: Boolean(participant.stream),
@@ -105,6 +106,9 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     isPlaybackBlocked,
     isVideoReady,
   });
+  const tileAriaLabel = mediaStatus
+    ? `${participantName}, ${participantRoleLabel}, ${mediaStatus.message}${participant.isSpeaking ? ", speaking" : ""}`
+    : `${participantName}, ${participantRoleLabel}${participant.isSpeaking ? ", speaking" : ""}`;
   const clearBlockedPlayback = useCallback(() => {
     setIsPlaybackBlocked(false);
   }, []);
@@ -254,7 +258,11 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   }, [participant.stream, syncPlayback]);
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 via-white/3 to-white/0 p-4 shadow-lg">
+    <div
+      className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 via-white/3 to-white/0 p-4 shadow-lg"
+      role="group"
+      aria-label={tileAriaLabel}
+    >
       <div className="mb-3 flex items-center justify-between gap-3 text-sm text-white/90">
         <div className="min-w-0 flex-1 truncate font-semibold" title={participantName}>
           {participantName}
@@ -263,7 +271,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
           className="shrink-0"
           tone={participant.role === "host" ? "success" : "default"}
         >
-          {getParticipantRoleLabel(participant.role)}
+          {participantRoleLabel}
         </Badge>
       </div>
       <div className="relative aspect-video overflow-hidden rounded-xl border border-white/5 bg-black/60">
@@ -310,6 +318,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
           </div>
         )}
       </div>
+      {participant.isSpeaking && <span className="sr-only">{participantName} is speaking.</span>}
       {participant.isSpeaking && (
         <div className="absolute inset-0 pointer-events-none border-2 border-emerald-400/60 rounded-2xl animate-pulse" />
       )}
