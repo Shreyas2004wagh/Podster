@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import type { Participant } from "@/components/video-grid";
 
 interface ParticipantTileProps {
   participant: Participant;
+}
+
+interface ParticipantMediaStatus {
+  message: string;
+  resumeLabel?: string;
 }
 
 function getParticipantDisplayName(participant: Participant) {
@@ -15,23 +21,106 @@ function getParticipantDisplayName(participant: Participant) {
   return participant.isLocal ? "You" : participant.role === "host" ? "Host" : "Guest";
 }
 
+function getParticipantRoleLabel(role: Participant["role"]) {
+  return role === "host" ? "Host" : "Guest";
+}
+
+function getParticipantMediaStatus({
+  hasStream,
+  hasAudioTrack,
+  hasVideoTrack,
+  hasLiveVideoTrack,
+  isLocal,
+  isPlaybackBlocked,
+  isVideoReady,
+}: {
+  hasStream: boolean;
+  hasAudioTrack: boolean;
+  hasVideoTrack: boolean;
+  hasLiveVideoTrack: boolean;
+  isLocal: boolean;
+  isPlaybackBlocked: boolean;
+  isVideoReady: boolean;
+}): ParticipantMediaStatus | null {
+  if (isPlaybackBlocked && !isLocal) {
+    return {
+      message: hasVideoTrack
+        ? "Browser playback is blocked."
+        : hasAudioTrack
+          ? "Browser audio playback is blocked."
+          : "Browser media playback is blocked.",
+      resumeLabel: hasVideoTrack ? "Resume playback" : hasAudioTrack ? "Resume audio" : "Resume media",
+    };
+  }
+
+  if (!hasStream) {
+    return {
+      message: isLocal ? "Camera preview unavailable" : "Waiting for participant media",
+    };
+  }
+
+  if (hasLiveVideoTrack && !isVideoReady) {
+    return {
+      message: isLocal ? "Starting camera preview" : "Waiting for video",
+    };
+  }
+
+  if (hasLiveVideoTrack && isVideoReady) {
+    return null;
+  }
+
+  if (hasVideoTrack) {
+    return {
+      message: isLocal ? "Camera is paused" : "Camera is unavailable",
+    };
+  }
+
+  if (hasAudioTrack) {
+    return {
+      message: isLocal ? "Audio only" : "Audio only participant",
+    };
+  }
+
+  return {
+    message: isLocal ? "No live media available" : "No live media available",
+  };
+}
+
 export function ParticipantTile({ participant }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const playbackAttemptRef = useRef(0);
   const [isPlaybackBlocked, setIsPlaybackBlocked] = useState(false);
+  const [hasAudioTrack, setHasAudioTrack] = useState(false);
+  const [hasVideoTrack, setHasVideoTrack] = useState(false);
   const [hasLiveVideoTrack, setHasLiveVideoTrack] = useState(false);
+  const [isVideoReady, setIsVideoReady] = useState(false);
   const participantName = getParticipantDisplayName(participant);
   const participantInitial = Array.from(participantName)[0]?.toUpperCase() ?? "?";
-  const showBlockedPlaybackControl =
-    Boolean(participant.stream) && isPlaybackBlocked && !participant.isLocal;
+  const mediaStatus = getParticipantMediaStatus({
+    hasStream: Boolean(participant.stream),
+    hasAudioTrack,
+    hasVideoTrack,
+    hasLiveVideoTrack,
+    isLocal: Boolean(participant.isLocal),
+    isPlaybackBlocked,
+    isVideoReady,
+  });
   const clearBlockedPlayback = useCallback(() => {
     setIsPlaybackBlocked(false);
+  }, []);
+  const markVideoReady = useCallback(() => {
+    setIsVideoReady(true);
+    setIsPlaybackBlocked(false);
+  }, []);
+  const markVideoUnavailable = useCallback(() => {
+    setIsVideoReady(false);
   }, []);
 
   const syncPlayback = useCallback(async () => {
     const video = videoRef.current;
     if (!video || !participant.stream) {
       setIsPlaybackBlocked(false);
+      setIsVideoReady(false);
       return;
     }
 
@@ -41,6 +130,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
 
     if (video.srcObject !== participant.stream) {
       video.srcObject = participant.stream;
+      setIsVideoReady(false);
     }
 
     const playbackAttempt = ++playbackAttemptRef.current;
@@ -60,6 +150,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
         return;
       }
 
+      setIsVideoReady(false);
       setIsPlaybackBlocked(true);
     }
   }, [participant.isLocal, participant.stream]);
@@ -67,60 +158,72 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   useEffect(() => {
     const stream = participant.stream;
     if (!stream) {
+      setHasAudioTrack(false);
+      setHasVideoTrack(false);
       setHasLiveVideoTrack(false);
+      setIsVideoReady(false);
       return;
     }
 
-    const trackedVideoTracks = new Set<MediaStreamTrack>();
+    const trackedMediaTracks = new Set<MediaStreamTrack>();
 
-    const updateVideoState = () => {
+    const updateTrackState = () => {
+      const audioTracks = stream.getAudioTracks();
+      const videoTracks = stream.getVideoTracks();
+
+      setHasAudioTrack(audioTracks.some((track) => track.readyState === "live"));
+      setHasVideoTrack(videoTracks.length > 0);
       setHasLiveVideoTrack(
-        stream
-          .getVideoTracks()
-          .some((track) => track.readyState === "live" && !track.muted)
+        videoTracks.some((track) => track.readyState === "live" && !track.muted)
       );
+      if (!videoTracks.some((track) => track.readyState === "live")) {
+        setIsVideoReady(false);
+      }
     };
 
     const subscribeTrack = (track: MediaStreamTrack) => {
-      if (track.kind !== "video") {
+      if (track.kind !== "audio" && track.kind !== "video") {
         return;
       }
 
-      trackedVideoTracks.add(track);
-      track.addEventListener("ended", updateVideoState);
-      track.addEventListener("unmute", updateVideoState);
-      track.addEventListener("mute", updateVideoState);
+      trackedMediaTracks.add(track);
+      track.addEventListener("ended", updateTrackState);
+      track.addEventListener("unmute", updateTrackState);
+      track.addEventListener("mute", updateTrackState);
     };
 
     const unsubscribeTrack = (track: MediaStreamTrack) => {
-      if (!trackedVideoTracks.has(track)) {
+      if (!trackedMediaTracks.has(track)) {
         return;
       }
 
-      trackedVideoTracks.delete(track);
-      track.removeEventListener("ended", updateVideoState);
-      track.removeEventListener("unmute", updateVideoState);
-      track.removeEventListener("mute", updateVideoState);
+      trackedMediaTracks.delete(track);
+      track.removeEventListener("ended", updateTrackState);
+      track.removeEventListener("unmute", updateTrackState);
+      track.removeEventListener("mute", updateTrackState);
     };
 
     const handleAddTrack = (event: MediaStreamTrackEvent) => {
       subscribeTrack(event.track);
-      updateVideoState();
+      updateTrackState();
       void syncPlayback();
     };
 
     const handleRemoveTrack = (event: MediaStreamTrackEvent) => {
       unsubscribeTrack(event.track);
-      updateVideoState();
+      if (event.track.kind === "video") {
+        setIsVideoReady(false);
+      }
+      updateTrackState();
     };
 
-    stream.getVideoTracks().forEach(subscribeTrack);
+    stream.getTracks().forEach(subscribeTrack);
     stream.addEventListener("addtrack", handleAddTrack);
     stream.addEventListener("removetrack", handleRemoveTrack);
-    updateVideoState();
+    updateTrackState();
 
     return () => {
-      trackedVideoTracks.forEach(unsubscribeTrack);
+      trackedMediaTracks.forEach(unsubscribeTrack);
       stream.removeEventListener("addtrack", handleAddTrack);
       stream.removeEventListener("removetrack", handleRemoveTrack);
     };
@@ -135,6 +238,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       video.pause();
       video.srcObject = null;
       setIsPlaybackBlocked(false);
+      setIsVideoReady(false);
       return;
     }
 
@@ -154,7 +258,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       <div className="mb-3 flex items-center justify-between text-sm text-white/90">
         <div className="font-semibold">{participantName}</div>
         <Badge tone={participant.role === "host" ? "success" : "default"}>
-          {participant.role}
+          {getParticipantRoleLabel(participant.role)}
         </Badge>
       </div>
       <div className="relative aspect-video overflow-hidden rounded-xl border border-white/5 bg-black/60">
@@ -168,41 +272,36 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
           onLoadedMetadata={() => {
             void syncPlayback();
           }}
-          onPlaying={clearBlockedPlayback}
-          onEmptied={clearBlockedPlayback}
+          onLoadedData={markVideoReady}
+          onPlaying={markVideoReady}
+          onEmptied={() => {
+            clearBlockedPlayback();
+            markVideoUnavailable();
+          }}
         />
-        {!hasLiveVideoTrack && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/40 text-center text-sm text-slate-200">
+        {mediaStatus && (
+          <div
+            className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/40 text-center text-sm text-slate-200"
+            role="status"
+            aria-live="polite"
+          >
             <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/10 text-lg font-semibold text-white">
               {participantInitial}
             </div>
-            <div>
-              {participant.isLocal ? "Camera preview unavailable" : "No live video available"}
-            </div>
-            {showBlockedPlaybackControl && (
-              <button
+            <div>{mediaStatus.message}</div>
+            {mediaStatus.resumeLabel && (
+              <Button
                 type="button"
-                className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/15"
+                variant="secondary"
+                size="sm"
+                className="rounded-full border-white/20 bg-white/10 hover:bg-white/15"
                 onClick={() => {
                   void syncPlayback();
                 }}
               >
-                Resume media
-              </button>
+                {mediaStatus.resumeLabel}
+              </Button>
             )}
-          </div>
-        )}
-        {hasLiveVideoTrack && showBlockedPlaybackControl && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/55">
-            <button
-              type="button"
-              className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/15"
-              onClick={() => {
-                void syncPlayback();
-              }}
-            >
-              Resume playback
-            </button>
           </div>
         )}
       </div>
