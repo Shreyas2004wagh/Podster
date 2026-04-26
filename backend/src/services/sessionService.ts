@@ -397,6 +397,22 @@ export class SessionService implements ISessionService {
         throw new UploadOwnershipError(uploadId);
       }
 
+      if (track.completedAt) {
+        this.logger.info(
+          {
+            event: "upload_completion_already_finalized",
+            sessionId,
+            trackId: track.id,
+            uploadId
+          },
+          "Upload was already finalized; cleaning up stale upload target metadata"
+        );
+
+        await this.uploadTargetRepository.delete(uploadTarget.id);
+        await this.syncSessionUploadStatus(sessionId, session.status);
+        return this.sessionRepository.findByIdWithTracks(sessionId);
+      }
+
       const normalizedParts = normalizeMultipartParts(parts ?? [], uploadTarget.partCount);
       
       this.logger.debug({
@@ -423,20 +439,7 @@ export class SessionService implements ISessionService {
 
       await this.uploadTargetRepository.delete(uploadTarget.id);
 
-      const [incompleteTracks, remainingUploadTargets] = await Promise.all([
-        this.trackRepository.findIncompleteTracks(sessionId),
-        this.uploadTargetRepository.findBySessionId(sessionId)
-      ]);
-
-      if (incompleteTracks.length === 0 && remainingUploadTargets.length === 0) {
-        await this.sessionRepository.update(sessionId, {
-          status: SessionStatus.COMPLETE
-        });
-      } else if (session.status !== SessionStatus.UPLOADING) {
-        await this.sessionRepository.update(sessionId, {
-          status: SessionStatus.UPLOADING
-        });
-      }
+      await this.syncSessionUploadStatus(sessionId, session.status);
       
       const finalSession = await this.sessionRepository.findByIdWithTracks(sessionId);
       
@@ -588,6 +591,26 @@ export class SessionService implements ISessionService {
       case "s3":
       default:
         return StorageProvider.S3;
+    }
+  }
+
+  private async syncSessionUploadStatus(sessionId: SessionId, previousStatus: SessionStatus) {
+    const [incompleteTracks, remainingUploadTargets] = await Promise.all([
+      this.trackRepository.findIncompleteTracks(sessionId),
+      this.uploadTargetRepository.findBySessionId(sessionId)
+    ]);
+
+    if (incompleteTracks.length === 0 && remainingUploadTargets.length === 0) {
+      await this.sessionRepository.update(sessionId, {
+        status: SessionStatus.COMPLETE
+      });
+      return;
+    }
+
+    if (previousStatus !== SessionStatus.UPLOADING) {
+      await this.sessionRepository.update(sessionId, {
+        status: SessionStatus.UPLOADING
+      });
     }
   }
 }

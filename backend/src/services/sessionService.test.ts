@@ -456,6 +456,58 @@ test("completeUpload keeps session uploading when other tracks remain pending", 
   assert.equal(result?.status, SessionStatus.UPLOADING);
 });
 
+test("completeUpload is idempotent when the track was already marked complete", async () => {
+  const updatedStatuses: SessionStatus[] = [];
+  const deletedTargetIds: string[] = [];
+  let storageCompletionCalls = 0;
+
+  const service = new SessionService(
+    createSessionRepositoryMock({
+      findByIdWithTracks: async () =>
+        Object.assign(createSession({ status: SessionStatus.UPLOADING }), {
+          tracks: [
+            createTrack({
+              id: "track-1",
+              userId: "guest-1",
+              completedAt: new Date("2026-03-17T04:10:00.000Z")
+            })
+          ]
+        }),
+      update: async (_id, input) => {
+        updatedStatuses.push(input.status ?? SessionStatus.DRAFT);
+        return createSession({ status: input.status ?? SessionStatus.DRAFT });
+      }
+    }),
+    createTrackRepositoryMock({
+      findIncompleteTracks: async () => []
+    }),
+    createUploadTargetRepositoryMock({
+      findByUploadId: async () => createUploadTarget({ partCount: 1 }),
+      delete: async (id) => {
+        deletedTargetIds.push(id);
+      },
+      findBySessionId: async () => []
+    }),
+    createStorageProviderMock({
+      completeMultipartUpload: async () => {
+        storageCompletionCalls += 1;
+      }
+    })
+  );
+
+  const result = await service.completeUpload(
+    "session-1",
+    "upload-1",
+    [{ partNumber: 1, etag: "etag-1" }],
+    "guest-1"
+  );
+
+  assert.equal(storageCompletionCalls, 0);
+  assert.deepEqual(deletedTargetIds, ["target-1"]);
+  assert.deepEqual(updatedStatuses, [SessionStatus.COMPLETE]);
+  assert.equal(result?.tracks[0]?.completedAt?.toISOString(), "2026-03-17T04:10:00.000Z");
+});
+
 test("completeUpload rejects malformed multipart part lists", async () => {
   const service = new SessionService(
     createSessionRepositoryMock({
