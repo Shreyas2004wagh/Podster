@@ -192,6 +192,10 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
         return;
       }
 
+      if (trackedMediaTracks.has(track)) {
+        return;
+      }
+
       trackedMediaTracks.add(track);
       track.addEventListener("ended", updateTrackState);
       track.addEventListener("unmute", updateTrackState);
@@ -229,7 +233,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     updateTrackState();
 
     return () => {
-      trackedMediaTracks.forEach(unsubscribeTrack);
+      Array.from(trackedMediaTracks).forEach(unsubscribeTrack);
       stream.removeEventListener("addtrack", handleAddTrack);
       stream.removeEventListener("removetrack", handleRemoveTrack);
     };
