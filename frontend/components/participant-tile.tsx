@@ -293,6 +293,8 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
           }}
           onLoadedData={markVideoReady}
           onPlaying={markVideoReady}
+          onPause={markVideoUnavailable}
+          onEnded={markVideoUnavailable}
           onEmptied={() => {
             clearBlockedPlayback();
             markVideoUnavailable();
