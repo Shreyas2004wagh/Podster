@@ -84,7 +84,7 @@ function getParticipantMediaStatus({
   }
 
   return {
-    message: isLocal ? "No live media available" : "No live media available",
+    message: "No live media available",
   };
 }
 
