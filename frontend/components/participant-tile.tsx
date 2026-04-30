@@ -108,6 +108,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     isPlaybackBlocked,
     isVideoReady,
   });
+  const showVideoFeed = hasLiveVideoTrack && isVideoReady;
   const tileAriaLabel = mediaStatus
     ? `${participantName}, ${participantRoleLabel}, ${mediaStatus.message}${participant.isSpeaking ? ", speaking" : ""}`
     : `${participantName}, ${participantRoleLabel}${participant.isSpeaking ? ", speaking" : ""}`;
@@ -283,7 +284,9 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       <div className="relative aspect-video overflow-hidden rounded-xl border border-white/5 bg-black/60">
         <video
           ref={videoRef}
-          className={`h-full w-full object-cover ${participant.isLocal ? "scale-x-[-1]" : ""}`}
+          className={`h-full w-full object-cover transition-opacity ${
+            participant.isLocal ? "scale-x-[-1]" : ""
+          } ${showVideoFeed ? "opacity-100" : "opacity-0"}`}
           autoPlay
           muted={participant.isLocal ?? false}
           playsInline
