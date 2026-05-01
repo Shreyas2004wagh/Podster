@@ -173,6 +173,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     }
 
     const trackedMediaTracks = new Set<MediaStreamTrack>();
+    const trackStateListeners = new Map<MediaStreamTrack, () => void>();
 
     const updateTrackState = () => {
       const audioTracks = stream.getAudioTracks();
@@ -198,9 +199,16 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       }
 
       trackedMediaTracks.add(track);
-      track.addEventListener("ended", updateTrackState);
-      track.addEventListener("unmute", updateTrackState);
-      track.addEventListener("mute", updateTrackState);
+      const handleTrackStateChange = () => {
+        updateTrackState();
+        if (track.kind === "video" && track.readyState === "live" && !track.muted) {
+          void syncPlayback();
+        }
+      };
+      trackStateListeners.set(track, handleTrackStateChange);
+      track.addEventListener("ended", handleTrackStateChange);
+      track.addEventListener("unmute", handleTrackStateChange);
+      track.addEventListener("mute", handleTrackStateChange);
     };
 
     const unsubscribeTrack = (track: MediaStreamTrack) => {
@@ -209,9 +217,15 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       }
 
       trackedMediaTracks.delete(track);
-      track.removeEventListener("ended", updateTrackState);
-      track.removeEventListener("unmute", updateTrackState);
-      track.removeEventListener("mute", updateTrackState);
+      const handleTrackStateChange = trackStateListeners.get(track);
+      if (!handleTrackStateChange) {
+        return;
+      }
+
+      trackStateListeners.delete(track);
+      track.removeEventListener("ended", handleTrackStateChange);
+      track.removeEventListener("unmute", handleTrackStateChange);
+      track.removeEventListener("mute", handleTrackStateChange);
     };
 
     const handleAddTrack = (event: MediaStreamTrackEvent) => {
@@ -296,7 +310,6 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
           }}
           onLoadedData={markVideoReady}
           onPlaying={markVideoReady}
-          onPause={markVideoUnavailable}
           onEnded={markVideoUnavailable}
           onEmptied={() => {
             clearBlockedPlayback();
