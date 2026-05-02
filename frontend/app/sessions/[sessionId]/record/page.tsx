@@ -63,6 +63,7 @@ export default function RecordingRoomPage() {
     stream,
     start: startMedia,
     error: mediaError,
+    isStarting: isStartingMedia,
   } = useLocalMedia({ video: true, audio: true });
 
   const { remoteParticipants, signalingError } = useWebRTC({
@@ -215,7 +216,12 @@ export default function RecordingRoomPage() {
   const hasStoredChunks = storedChunkCount > 0;
   const hasRecoverableChunks = hasStoredChunks && !isUploadActive && !hasFailedUploads;
   const canStartRecording =
-    Boolean(viewer && sessionId) && !hasFailedUploads && !hasRecoverableChunks && !mediaError && canRecord;
+    Boolean(viewer && sessionId && stream) &&
+    !isStartingMedia &&
+    !hasFailedUploads &&
+    !hasRecoverableChunks &&
+    !mediaError &&
+    canRecord;
   const resetUploadState = () => {
     setUploadItems([]);
     setCompletedParts([]);
@@ -230,13 +236,11 @@ export default function RecordingRoomPage() {
       ? "Recorded chunks were found locally. Upload or clear them before starting a new take."
     : hasFailedUploads
       ? "Retry or clear the failed upload before starting a new recording."
-      : mediaError
-        ? mediaError
-        : !canRecord
-          ? "This browser cannot record local media with MediaRecorder."
-      : isHost
-        ? undefined
-        : "Guests can record locally after joining, but only the host can start the session live.";
+      : isStartingMedia
+        ? "Preparing local camera and microphone access."
+        : isHost
+          ? undefined
+          : "Guests can record locally after joining, but only the host can start the session live.";
 
   useEffect(() => {
     resetUploadState();
