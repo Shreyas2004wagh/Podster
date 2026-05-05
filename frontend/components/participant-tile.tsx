@@ -198,9 +198,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       setHasAnyTrack(audioTracks.length > 0 || videoTracks.length > 0);
       setHasAudioTrack(audioTracks.some((track) => track.readyState === "live"));
       setHasVideoTrack(videoTracks.length > 0);
-      setHasLiveVideoTrack(
-        videoTracks.some((track) => track.readyState === "live" && !track.muted)
-      );
+      setHasLiveVideoTrack(videoTracks.some((track) => track.readyState === "live"));
       if (!videoTracks.some((track) => track.readyState === "live")) {
         setIsVideoReady(false);
       }
@@ -218,7 +216,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       trackedMediaTracks.add(track);
       const handleTrackStateChange = () => {
         updateTrackState();
-        if (track.kind === "video" && track.readyState === "live" && !track.muted) {
+        if (track.kind === "video" && track.readyState === "live") {
           void syncPlayback();
         }
       };
