@@ -15,12 +15,18 @@ interface ParticipantMediaStatus {
 }
 
 function getParticipantDisplayName(participant: Participant) {
-  const trimmedName = participant.name.trim();
+  const rawName = typeof participant.name === "string" ? participant.name : "";
+  const trimmedName = rawName.trim();
   if (trimmedName) {
     return trimmedName;
   }
 
   return participant.isLocal ? "You" : participant.role === "host" ? "Host" : "Guest";
+}
+
+function getParticipantInitial(participantName: string) {
+  const firstVisibleCharacter = Array.from(participantName).find((character) => /\S/u.test(character));
+  return firstVisibleCharacter?.toUpperCase() ?? "?";
 }
 
 function getParticipantRoleLabel(role: Participant["role"]) {
@@ -98,7 +104,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   const [isVideoReady, setIsVideoReady] = useState(false);
   const participantName = getParticipantDisplayName(participant);
   const participantRoleLabel = getParticipantRoleLabel(participant.role);
-  const participantInitial = Array.from(participantName)[0]?.toUpperCase() ?? "?";
+  const participantInitial = getParticipantInitial(participantName);
   const mediaStatus = getParticipantMediaStatus({
     hasStream: Boolean(participant.stream),
     hasAudioTrack,
