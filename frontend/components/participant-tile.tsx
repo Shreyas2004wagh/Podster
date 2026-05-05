@@ -140,7 +140,14 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
 
   const syncPlayback = useCallback(async () => {
     const video = videoRef.current;
-    if (!video || !participant.stream) {
+    if (!video) {
+      return;
+    }
+
+    if (!participant.stream) {
+      playbackAttemptRef.current += 1;
+      video.pause();
+      video.srcObject = null;
       setIsPlaybackBlocked(false);
       setIsVideoReady(false);
       return;
