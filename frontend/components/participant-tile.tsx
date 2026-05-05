@@ -35,6 +35,7 @@ function getParticipantRoleLabel(role: Participant["role"]) {
 
 function getParticipantMediaStatus({
   hasStream,
+  hasAnyTrack,
   hasAudioTrack,
   hasVideoTrack,
   hasLiveVideoTrack,
@@ -64,6 +65,12 @@ function getParticipantMediaStatus({
   if (!hasStream) {
     return {
       message: isLocal ? "Camera preview unavailable" : "Waiting for participant media",
+    };
+  }
+
+  if (!hasAnyTrack) {
+    return {
+      message: isLocal ? "Connecting camera and microphone" : "Connecting participant media",
     };
   }
 
@@ -98,6 +105,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const playbackAttemptRef = useRef(0);
   const [isPlaybackBlocked, setIsPlaybackBlocked] = useState(false);
+  const [hasAnyTrack, setHasAnyTrack] = useState(false);
   const [hasAudioTrack, setHasAudioTrack] = useState(false);
   const [hasVideoTrack, setHasVideoTrack] = useState(false);
   const [hasLiveVideoTrack, setHasLiveVideoTrack] = useState(false);
@@ -107,6 +115,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   const participantInitial = getParticipantInitial(participantName);
   const mediaStatus = getParticipantMediaStatus({
     hasStream: Boolean(participant.stream),
+    hasAnyTrack,
     hasAudioTrack,
     hasVideoTrack,
     hasLiveVideoTrack,
@@ -172,6 +181,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     const stream = participant.stream;
     if (!stream) {
       setHasAudioTrack(false);
+      setHasAnyTrack(false);
       setHasVideoTrack(false);
       setHasLiveVideoTrack(false);
       setIsVideoReady(false);
@@ -185,6 +195,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       const audioTracks = stream.getAudioTracks();
       const videoTracks = stream.getVideoTracks();
 
+      setHasAnyTrack(audioTracks.length > 0 || videoTracks.length > 0);
       setHasAudioTrack(audioTracks.some((track) => track.readyState === "live"));
       setHasVideoTrack(videoTracks.length > 0);
       setHasLiveVideoTrack(
