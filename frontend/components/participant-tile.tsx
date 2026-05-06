@@ -328,7 +328,8 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
           autoPlay
           muted={participant.isLocal ?? false}
           playsInline
-          aria-label={`${participantName} media feed`}
+          aria-hidden={!showVideoFeed}
+          aria-label={showVideoFeed ? `${participantName} media feed` : undefined}
           onLoadedMetadata={() => {
             void syncPlayback();
           }}
