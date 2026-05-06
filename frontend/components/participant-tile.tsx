@@ -166,7 +166,6 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     }
 
     const playbackAttempt = ++playbackAttemptRef.current;
-    setIsPlaybackBlocked(false);
 
     try {
       await video.play();
