@@ -137,6 +137,9 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   const markVideoUnavailable = useCallback(() => {
     setIsVideoReady(false);
   }, []);
+  const handlePlaybackInterrupted = useCallback(() => {
+    setIsVideoReady(false);
+  }, []);
 
   const syncPlayback = useCallback(async () => {
     const video = videoRef.current;
@@ -330,9 +333,15 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
           onLoadedMetadata={() => {
             void syncPlayback();
           }}
+          onCanPlay={markVideoReady}
           onLoadedData={markVideoReady}
           onPlaying={markVideoReady}
           onEnded={markVideoUnavailable}
+          onPause={handlePlaybackInterrupted}
+          onWaiting={handlePlaybackInterrupted}
+          onStalled={handlePlaybackInterrupted}
+          onSuspend={handlePlaybackInterrupted}
+          onError={handlePlaybackInterrupted}
           onEmptied={() => {
             clearBlockedPlayback();
             markVideoUnavailable();
