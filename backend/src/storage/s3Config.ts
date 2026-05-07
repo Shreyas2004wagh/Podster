@@ -50,5 +50,12 @@ export function resolveForcePathStyle({
 }
 
 export function resolveCorsAllowedOrigins(frontendOrigin: string) {
-  return Array.from(new Set([frontendOrigin.trim()].filter(Boolean)));
+  return Array.from(
+    new Set(
+      frontendOrigin
+        .split(",")
+        .map((origin) => origin.trim())
+        .filter(Boolean)
+    )
+  );
 }

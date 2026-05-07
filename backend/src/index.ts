@@ -19,12 +19,31 @@ import healthRoutes from "./routes/health.js";
 // Configure dependency injection container
 configureContainer();
 
+const allowedOrigins = new Set(env.FRONTEND_ORIGINS);
+const isOriginAllowed = (origin: string | undefined) => {
+  if (!origin) {
+    return true;
+  }
+
+  return allowedOrigins.has(origin);
+};
+
 const server = Fastify({
   loggerInstance: logger,
   disableRequestLogging: true // We handle this in our middleware
 });
 
-server.register(fastifyCors, { origin: env.FRONTEND_ORIGIN, credentials: true });
+server.register(fastifyCors, {
+  origin: (origin, callback) => {
+    if (isOriginAllowed(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`Origin ${origin ?? "unknown"} is not allowed by CORS`), false);
+  },
+  credentials: true
+});
 server.register(fastifyCookie, {
   secret: env.COOKIE_SECRET,
   hook: "onRequest"

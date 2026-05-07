@@ -42,9 +42,17 @@ type SignalingUserPayload = {
 
 export default fp(async (fastify) => {
     const sessionService = resolve<ISessionService>(TOKENS.SessionService);
+    const allowedOrigins = new Set(env.FRONTEND_ORIGINS);
     const io = new Server(fastify.server, {
         cors: {
-            origin: env.FRONTEND_ORIGIN,
+            origin: (origin, callback) => {
+                if (!origin || allowedOrigins.has(origin)) {
+                    callback(null, true);
+                    return;
+                }
+
+                callback(new Error(`Origin ${origin} is not allowed by Socket.IO CORS`), false);
+            },
             methods: ["GET", "POST"],
             credentials: true
         }
