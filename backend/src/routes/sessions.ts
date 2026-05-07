@@ -270,13 +270,16 @@ export default fp(async (fastify) => {
   // Resolve SessionService from the DI container
   const service = resolve<ISessionService>(TOKENS.SessionService);
   const TOKEN_COOKIE = "podster_token";
+  const isProduction = env.NODE_ENV === "production";
+  const cookieDomain = env.COOKIE_DOMAIN?.trim() || undefined;
 
   const setAuthCookie = (reply: FastifyReply, token: string, maxAge: number) => {
     reply.setCookie(TOKEN_COOKIE, token, {
       httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      sameSite: env.COOKIE_SAME_SITE,
+      secure: isProduction,
       path: "/",
+      domain: cookieDomain,
       maxAge
     });
   };
