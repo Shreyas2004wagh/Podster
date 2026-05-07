@@ -9,6 +9,17 @@ const generatedSecrets = {
   cookie: randomBytes(32).toString("hex")
 };
 
+function parseCommaSeparatedList(value: string | undefined) {
+  if (!value) {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().default(4000),
@@ -50,7 +61,10 @@ const envSchema = z.object({
 
   // CORS / cookies
   FRONTEND_ORIGIN: z.string().default("http://localhost:3000"),
-  COOKIE_SECRET: z.string().min(32).default(generatedSecrets.cookie)
+  RENDER_EXTERNAL_URL: z.string().url().optional(),
+  COOKIE_SECRET: z.string().min(32).default(generatedSecrets.cookie),
+  COOKIE_DOMAIN: z.string().trim().optional(),
+  COOKIE_SAME_SITE: z.enum(["strict", "lax", "none"]).default("lax")
 }).superRefine((env, ctx) => {
   if (env.NODE_ENV !== "production") {
     return;
@@ -79,6 +93,61 @@ const envSchema = z.object({
       message: "COOKIE_SECRET must be explicitly configured in production"
     });
   }
+
+  if (env.DATABASE_URL === "postgresql://podster:podster@localhost:5432/podster") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["DATABASE_URL"],
+      message: "DATABASE_URL must be explicitly configured in production"
+    });
+  }
+
+  if (env.FRONTEND_ORIGIN === "http://localhost:3000") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["FRONTEND_ORIGIN"],
+      message: "FRONTEND_ORIGIN must be explicitly configured in production"
+    });
+  }
+
+  if (env.STORAGE_BUCKET === "podster") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["STORAGE_BUCKET"],
+      message: "STORAGE_BUCKET must be explicitly configured in production"
+    });
+  }
+
+  if (env.STORAGE_PROVIDER !== "local") {
+    if (!env.STORAGE_ACCESS_KEY.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["STORAGE_ACCESS_KEY"],
+        message: "STORAGE_ACCESS_KEY is required in production"
+      });
+    }
+
+    if (!env.STORAGE_SECRET_KEY.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["STORAGE_SECRET_KEY"],
+        message: "STORAGE_SECRET_KEY is required in production"
+      });
+    }
+  }
+
+  if (env.COOKIE_SAME_SITE === "none" && !env.COOKIE_DOMAIN?.trim() && !env.RENDER_EXTERNAL_URL) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["COOKIE_SAME_SITE"],
+      message: "COOKIE_SAME_SITE=none requires COOKIE_DOMAIN or RENDER_EXTERNAL_URL in production"
+    });
+  }
 });
 
-export const env = envSchema.parse(process.env);
+const parsedEnv = envSchema.parse(process.env);
+
+export const env = {
+  ...parsedEnv,
+  FRONTEND_ORIGINS: parseCommaSeparatedList(parsedEnv.FRONTEND_ORIGIN)
+};
