@@ -39,6 +39,37 @@ Copy `infra/env.example` to `.env` files as needed. Key vars:
 - `HOST_JWT_SECRET`, `GUEST_JWT_SECRET` - JWT signing secrets
 - `STORAGE_*` - S3/R2-compatible settings for signed URLs
 
+## Render backend deployment
+
+For a Render web service that runs the backend:
+
+- Root directory: repo root
+- Build command: `pnpm install --frozen-lockfile && pnpm --filter @podster/shared build && pnpm --filter @podster/backend db:generate && pnpm --filter @podster/backend build`
+- Pre-deploy command: `pnpm --filter @podster/backend db:migrate:deploy`
+- Start command: `pnpm --filter @podster/backend start`
+
+Set these backend env vars explicitly in Render production:
+
+- `NODE_ENV=production`
+- `PORT` supplied by Render
+- `DATABASE_URL`
+- `FRONTEND_ORIGIN`
+  Use a comma-separated list if you need both a production frontend URL and a preview/local URL.
+- `HOST_JWT_SECRET`
+- `GUEST_JWT_SECRET`
+- `COOKIE_SECRET`
+- `COOKIE_SAME_SITE`
+  Use `none` if the frontend and backend are on different sites.
+- `COOKIE_DOMAIN`
+  Set this when you need cookies shared across subdomains.
+- `STORAGE_PROVIDER`
+- `STORAGE_BUCKET`
+- `STORAGE_REGION`
+- `STORAGE_ACCESS_KEY`
+- `STORAGE_SECRET_KEY`
+- `STORAGE_ENDPOINT`
+  Required for R2 or any non-AWS S3-compatible target.
+
 ### Storage notes
 
 - Multipart uploads require the bucket CORS policy to expose the `ETag` response header.
