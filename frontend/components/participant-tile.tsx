@@ -151,7 +151,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   const markVideoUnavailable = useCallback(() => {
     setIsVideoReady(false);
   }, []);
-  const handlePlaybackInterrupted = useCallback(() => {
+  const handlePlaybackError = useCallback(() => {
     setIsVideoReady(false);
   }, []);
 
@@ -353,10 +353,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
           onLoadedData={markVideoReady}
           onPlaying={markVideoReady}
           onEnded={markVideoUnavailable}
-          onPause={handlePlaybackInterrupted}
-          onWaiting={handlePlaybackInterrupted}
-          onStalled={handlePlaybackInterrupted}
-          onError={handlePlaybackInterrupted}
+          onError={handlePlaybackError}
           onEmptied={() => {
             clearBlockedPlayback();
             markVideoUnavailable();
