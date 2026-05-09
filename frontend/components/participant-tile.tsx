@@ -173,6 +173,10 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     const shouldMute = Boolean(participant.isLocal);
     video.defaultMuted = shouldMute;
     video.muted = shouldMute;
+    const hasLiveAudioTrack = participant.stream
+      .getAudioTracks()
+      .some((track) => track.readyState === "live");
+    const hasLiveMediaTrack = hasLiveAudioTrack || participant.stream.active;
 
     if (video.srcObject !== participant.stream) {
       video.srcObject = participant.stream;
@@ -196,7 +200,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       }
 
       setIsVideoReady(false);
-      setIsPlaybackBlocked(true);
+      setIsPlaybackBlocked(hasLiveMediaTrack);
     }
   }, [participant.isLocal, participant.stream]);
 
