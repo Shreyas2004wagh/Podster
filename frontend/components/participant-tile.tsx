@@ -366,8 +366,6 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
         {mediaStatus && (
           <div
             className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/40 text-center text-sm text-slate-200"
-            role="status"
-            aria-live="polite"
           >
             <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/10 text-lg font-semibold text-white">
               {participantInitial}
