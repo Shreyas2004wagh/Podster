@@ -145,6 +145,15 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     setIsPlaybackBlocked(false);
   }, []);
   const markVideoReady = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) {
+      return;
+    }
+
+    if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth === 0) {
+      return;
+    }
+
     setIsVideoReady(true);
     setIsPlaybackBlocked(false);
   }, []);
