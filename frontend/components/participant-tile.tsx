@@ -356,7 +356,6 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
           onPause={handlePlaybackInterrupted}
           onWaiting={handlePlaybackInterrupted}
           onStalled={handlePlaybackInterrupted}
-          onSuspend={handlePlaybackInterrupted}
           onError={handlePlaybackInterrupted}
           onEmptied={() => {
             clearBlockedPlayback();
