@@ -182,7 +182,8 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       return;
     }
 
-    if (!participant.stream) {
+    const stream = participant.stream;
+    if (!stream) {
       playbackAttemptRef.current += 1;
       video.pause();
       video.srcObject = null;
@@ -194,14 +195,21 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     const shouldMute = Boolean(participant.isLocal);
     video.defaultMuted = shouldMute;
     video.muted = shouldMute;
-    const hasLiveAudioTrack = participant.stream
-      .getAudioTracks()
-      .some((track) => track.readyState === "live");
-    const hasLiveMediaTrack = hasLiveAudioTrack || participant.stream.active;
+    const hasLiveAudioTrack = stream.getAudioTracks().some(isTrackUsable);
+    const hasLiveVideoTrack = stream.getVideoTracks().some(isTrackUsable);
+    const hasLiveMediaTrack = hasLiveAudioTrack || hasLiveVideoTrack;
 
-    if (video.srcObject !== participant.stream) {
-      video.srcObject = participant.stream;
+    if (video.srcObject !== stream) {
+      video.srcObject = stream;
       setIsVideoReady(false);
+    }
+
+    if (!hasLiveMediaTrack) {
+      playbackAttemptRef.current += 1;
+      video.pause();
+      setIsPlaybackBlocked(false);
+      setIsVideoReady(false);
+      return;
     }
 
     const playbackAttempt = ++playbackAttemptRef.current;
