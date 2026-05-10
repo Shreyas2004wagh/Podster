@@ -14,6 +14,14 @@ interface ParticipantMediaStatus {
   resumeLabel?: string;
 }
 
+function isTrackLive(track: MediaStreamTrack) {
+  return track.readyState === "live";
+}
+
+function isTrackUsable(track: MediaStreamTrack) {
+  return isTrackLive(track) && !track.muted;
+}
+
 function getParticipantDisplayName(participant: Participant) {
   const rawName = typeof participant.name === "string" ? participant.name : "";
   const trimmedName = rawName.trim();
@@ -37,7 +45,7 @@ function getParticipantMediaStatus({
   hasStream,
   hasAnyTrack,
   isStreamActive,
-  hasAudioTrack,
+  hasLiveAudioTrack,
   hasVideoTrack,
   hasLiveVideoTrack,
   isLocal,
@@ -47,7 +55,7 @@ function getParticipantMediaStatus({
   hasStream: boolean;
   hasAnyTrack: boolean;
   isStreamActive: boolean;
-  hasAudioTrack: boolean;
+  hasLiveAudioTrack: boolean;
   hasVideoTrack: boolean;
   hasLiveVideoTrack: boolean;
   isLocal: boolean;
@@ -58,10 +66,14 @@ function getParticipantMediaStatus({
     return {
       message: hasVideoTrack
         ? "Browser playback is blocked."
-        : hasAudioTrack
+        : hasLiveAudioTrack
           ? "Browser audio playback is blocked."
           : "Browser media playback is blocked.",
-      resumeLabel: hasVideoTrack ? "Resume playback" : hasAudioTrack ? "Resume audio" : "Resume media",
+      resumeLabel: hasVideoTrack
+        ? "Resume playback"
+        : hasLiveAudioTrack
+          ? "Resume audio"
+          : "Resume media",
     };
   }
 
@@ -97,7 +109,7 @@ function getParticipantMediaStatus({
     };
   }
 
-  if (hasAudioTrack) {
+  if (hasLiveAudioTrack) {
     return {
       message: isLocal ? "Audio only" : "Audio only participant",
     };
@@ -114,7 +126,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   const [isPlaybackBlocked, setIsPlaybackBlocked] = useState(false);
   const [hasAnyTrack, setHasAnyTrack] = useState(false);
   const [isStreamActive, setIsStreamActive] = useState(false);
-  const [hasAudioTrack, setHasAudioTrack] = useState(false);
+  const [hasLiveAudioTrack, setHasLiveAudioTrack] = useState(false);
   const [hasVideoTrack, setHasVideoTrack] = useState(false);
   const [hasLiveVideoTrack, setHasLiveVideoTrack] = useState(false);
   const [isVideoReady, setIsVideoReady] = useState(false);
@@ -125,7 +137,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     hasStream: Boolean(participant.stream),
     hasAnyTrack,
     isStreamActive,
-    hasAudioTrack,
+    hasLiveAudioTrack,
     hasVideoTrack,
     hasLiveVideoTrack,
     isLocal: Boolean(participant.isLocal),
@@ -216,7 +228,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   useEffect(() => {
     const stream = participant.stream;
     if (!stream) {
-      setHasAudioTrack(false);
+      setHasLiveAudioTrack(false);
       setHasAnyTrack(false);
       setIsStreamActive(false);
       setHasVideoTrack(false);
@@ -234,10 +246,10 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
 
       setHasAnyTrack(audioTracks.length > 0 || videoTracks.length > 0);
       setIsStreamActive(stream.active);
-      setHasAudioTrack(audioTracks.some((track) => track.readyState === "live"));
+      setHasLiveAudioTrack(audioTracks.some(isTrackUsable));
       setHasVideoTrack(videoTracks.length > 0);
-      setHasLiveVideoTrack(videoTracks.some((track) => track.readyState === "live"));
-      if (!videoTracks.some((track) => track.readyState === "live")) {
+      setHasLiveVideoTrack(videoTracks.some(isTrackUsable));
+      if (!videoTracks.some(isTrackUsable)) {
         setIsVideoReady(false);
       }
     };
@@ -254,7 +266,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       trackedMediaTracks.add(track);
       const handleTrackStateChange = () => {
         updateTrackState();
-        if (track.kind === "video" && track.readyState === "live") {
+        if (track.kind === "video" && isTrackUsable(track)) {
           void syncPlayback();
         }
       };
