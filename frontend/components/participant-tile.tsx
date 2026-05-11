@@ -253,13 +253,18 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     const updateTrackState = () => {
       const audioTracks = stream.getAudioTracks();
       const videoTracks = stream.getVideoTracks();
+      const hasUsableAudioTrack = audioTracks.some(isTrackUsable);
+      const hasUsableVideoTrack = videoTracks.some(isTrackUsable);
 
       setHasAnyTrack(audioTracks.length > 0 || videoTracks.length > 0);
       setIsStreamActive(stream.active);
-      setHasLiveAudioTrack(audioTracks.some(isTrackUsable));
+      setHasLiveAudioTrack(hasUsableAudioTrack);
       setHasVideoTrack(videoTracks.length > 0);
-      setHasLiveVideoTrack(videoTracks.some(isTrackUsable));
-      if (!videoTracks.some(isTrackUsable)) {
+      setHasLiveVideoTrack(hasUsableVideoTrack);
+      if (!hasUsableAudioTrack && !hasUsableVideoTrack) {
+        setIsPlaybackBlocked(false);
+      }
+      if (!hasUsableVideoTrack) {
         setIsVideoReady(false);
       }
     };
