@@ -162,6 +162,15 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       return;
     }
 
+    const boundStream = video.srcObject;
+    if (!(boundStream instanceof MediaStream)) {
+      return;
+    }
+
+    if (!boundStream.getVideoTracks().some(isTrackUsable)) {
+      return;
+    }
+
     if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth === 0) {
       return;
     }
