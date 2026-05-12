@@ -64,12 +64,12 @@ function getParticipantMediaStatus({
 }): ParticipantMediaStatus | null {
   if (isPlaybackBlocked && !isLocal) {
     return {
-      message: hasVideoTrack
+      message: hasLiveVideoTrack
         ? "Browser playback is blocked."
         : hasLiveAudioTrack
           ? "Browser audio playback is blocked."
           : "Browser media playback is blocked.",
-      resumeLabel: hasVideoTrack
+      resumeLabel: hasLiveVideoTrack
         ? "Resume playback"
         : hasLiveAudioTrack
           ? "Resume audio"
