@@ -290,7 +290,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       trackedMediaTracks.add(track);
       const handleTrackStateChange = () => {
         updateTrackState();
-        if (track.kind === "video" && isTrackUsable(track)) {
+        if (isTrackUsable(track)) {
           void syncPlayback();
         }
       };
