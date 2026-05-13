@@ -332,12 +332,16 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     };
 
     stream.getTracks().forEach(subscribeTrack);
+    stream.addEventListener("active", updateTrackState);
+    stream.addEventListener("inactive", updateTrackState);
     stream.addEventListener("addtrack", handleAddTrack);
     stream.addEventListener("removetrack", handleRemoveTrack);
     updateTrackState();
 
     return () => {
       Array.from(trackedMediaTracks).forEach(unsubscribeTrack);
+      stream.removeEventListener("active", updateTrackState);
+      stream.removeEventListener("inactive", updateTrackState);
       stream.removeEventListener("addtrack", handleAddTrack);
       stream.removeEventListener("removetrack", handleRemoveTrack);
     };
