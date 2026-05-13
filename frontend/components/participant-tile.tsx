@@ -278,7 +278,8 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       setHasVideoTrack(videoTracks.length > 0);
       setHasLiveVideoTrack(hasUsableVideoTrack);
       if (!hasUsableAudioTrack && !hasUsableVideoTrack) {
-        setIsPlaybackBlocked(false);
+        resetPlayback();
+        return;
       }
       if (!hasUsableVideoTrack) {
         setIsVideoReady(false);
@@ -352,7 +353,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       stream.removeEventListener("addtrack", handleAddTrack);
       stream.removeEventListener("removetrack", handleRemoveTrack);
     };
-  }, [participant.stream, syncPlayback]);
+  }, [participant.stream, resetPlayback, syncPlayback]);
 
   useEffect(() => {
     const video = videoRef.current;
