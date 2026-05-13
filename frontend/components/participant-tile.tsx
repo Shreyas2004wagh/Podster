@@ -156,6 +156,20 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   const clearBlockedPlayback = useCallback(() => {
     setIsPlaybackBlocked(false);
   }, []);
+  const resetPlayback = useCallback((options?: { clearSource?: boolean }) => {
+    const video = videoRef.current;
+    if (!video) {
+      return;
+    }
+
+    playbackAttemptRef.current += 1;
+    video.pause();
+    if (options?.clearSource) {
+      video.srcObject = null;
+    }
+    setIsPlaybackBlocked(false);
+    setIsVideoReady(false);
+  }, []);
   const markVideoReady = useCallback(() => {
     const video = videoRef.current;
     if (!video) {
@@ -195,11 +209,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
 
     const stream = participant.stream;
     if (!stream) {
-      playbackAttemptRef.current += 1;
-      video.pause();
-      video.srcObject = null;
-      setIsPlaybackBlocked(false);
-      setIsVideoReady(false);
+      resetPlayback({ clearSource: true });
       return;
     }
 
@@ -216,10 +226,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     }
 
     if (!hasLiveMediaTrack) {
-      playbackAttemptRef.current += 1;
-      video.pause();
-      setIsPlaybackBlocked(false);
-      setIsVideoReady(false);
+      resetPlayback();
       return;
     }
 
@@ -242,7 +249,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       setIsVideoReady(false);
       setIsPlaybackBlocked(hasLiveMediaTrack);
     }
-  }, [participant.isLocal, participant.stream]);
+  }, [participant.isLocal, participant.stream, resetPlayback]);
 
   useEffect(() => {
     const stream = participant.stream;
@@ -352,11 +359,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     if (!video) return;
 
     if (!participant.stream) {
-      playbackAttemptRef.current += 1;
-      video.pause();
-      video.srcObject = null;
-      setIsPlaybackBlocked(false);
-      setIsVideoReady(false);
+      resetPlayback({ clearSource: true });
       return;
     }
 
@@ -369,7 +372,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
         video.srcObject = null;
       }
     };
-  }, [participant.stream, syncPlayback]);
+  }, [participant.stream, resetPlayback, syncPlayback]);
 
   return (
     <div
