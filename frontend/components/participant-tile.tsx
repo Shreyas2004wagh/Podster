@@ -157,6 +157,9 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     setIsPlaybackBlocked(false);
   }, []);
   const resetPlayback = useCallback((options?: { clearSource?: boolean }) => {
+    setIsPlaybackBlocked(false);
+    setIsVideoReady(false);
+
     const video = videoRef.current;
     if (!video) {
       return;
@@ -167,8 +170,6 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     if (options?.clearSource) {
       video.srcObject = null;
     }
-    setIsPlaybackBlocked(false);
-    setIsVideoReady(false);
   }, []);
   const markVideoReady = useCallback(() => {
     const video = videoRef.current;
