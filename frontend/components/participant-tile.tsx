@@ -62,21 +62,6 @@ function getParticipantMediaStatus({
   isPlaybackBlocked: boolean;
   isVideoReady: boolean;
 }): ParticipantMediaStatus | null {
-  if (isPlaybackBlocked && !isLocal) {
-    return {
-      message: hasLiveVideoTrack
-        ? "Browser playback is blocked."
-        : hasLiveAudioTrack
-          ? "Browser audio playback is blocked."
-          : "Browser media playback is blocked.",
-      resumeLabel: hasLiveVideoTrack
-        ? "Resume playback"
-        : hasLiveAudioTrack
-          ? "Resume audio"
-          : "Resume media",
-    };
-  }
-
   if (!hasStream) {
     return {
       message: isLocal ? "Camera preview unavailable" : "Waiting for participant media",
@@ -101,6 +86,15 @@ function getParticipantMediaStatus({
 
   if (hasLiveVideoTrack && isVideoReady) {
     return null;
+  }
+
+  if (isPlaybackBlocked && !isLocal && (hasLiveVideoTrack || hasLiveAudioTrack)) {
+    return {
+      message: hasLiveVideoTrack
+        ? "Browser playback is blocked."
+        : "Browser audio playback is blocked.",
+      resumeLabel: hasLiveVideoTrack ? "Resume playback" : "Resume audio",
+    };
   }
 
   if (hasVideoTrack) {
