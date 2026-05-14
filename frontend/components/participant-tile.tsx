@@ -97,15 +97,15 @@ function getParticipantMediaStatus({
     };
   }
 
-  if (hasVideoTrack) {
-    return {
-      message: isLocal ? "Camera is paused" : "Camera is unavailable",
-    };
-  }
-
   if (hasLiveAudioTrack) {
     return {
       message: isLocal ? "Audio only" : "Audio only participant",
+    };
+  }
+
+  if (hasVideoTrack) {
+    return {
+      message: isLocal ? "Camera is paused" : "Camera is unavailable",
     };
   }
 
