@@ -249,12 +249,12 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   useEffect(() => {
     const stream = participant.stream;
     if (!stream) {
+      resetPlayback({ clearSource: true });
       setHasLiveAudioTrack(false);
       setHasAnyTrack(false);
       setIsStreamActive(false);
       setHasVideoTrack(false);
       setHasLiveVideoTrack(false);
-      setIsVideoReady(false);
       return;
     }
 
