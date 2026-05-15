@@ -370,11 +370,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     void syncPlayback();
 
     return () => {
-      playbackAttemptRef.current += 1;
-      video.pause();
-      if (video.srcObject === participant.stream) {
-        video.srcObject = null;
-      }
+      resetPlayback({ clearSource: video.srcObject === participant.stream });
     };
   }, [participant.stream, resetPlayback, syncPlayback]);
 
