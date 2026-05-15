@@ -153,13 +153,13 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   const resetPlayback = useCallback((options?: { clearSource?: boolean }) => {
     setIsPlaybackBlocked(false);
     setIsVideoReady(false);
+    playbackAttemptRef.current += 1;
 
     const video = videoRef.current;
     if (!video) {
       return;
     }
 
-    playbackAttemptRef.current += 1;
     video.pause();
     if (options?.clearSource) {
       video.srcObject = null;
