@@ -84,6 +84,12 @@ function getParticipantMediaStatus({
     };
   }
 
+  if (!isStreamActive && !hasLiveAudioTrack && !hasLiveVideoTrack) {
+    return {
+      message: isLocal ? "Reconnecting camera and microphone" : "Reconnecting participant media",
+    };
+  }
+
   if (hasLiveVideoTrack && !isVideoReady) {
     return {
       message: isLocal ? "Starting camera preview" : "Waiting for video",
