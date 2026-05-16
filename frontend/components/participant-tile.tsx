@@ -18,8 +18,12 @@ function isTrackLive(track: MediaStreamTrack) {
   return track.readyState === "live";
 }
 
-function isTrackUsable(track: MediaStreamTrack) {
-  return isTrackLive(track) && !track.muted;
+function isTrackEnabled(track: MediaStreamTrack, isLocal: boolean) {
+  return !isLocal || track.enabled;
+}
+
+function isTrackUsable(track: MediaStreamTrack, isLocal: boolean) {
+  return isTrackLive(track) && !track.muted && isTrackEnabled(track, isLocal);
 }
 
 function getParticipantDisplayName(participant: Participant) {
@@ -115,6 +119,7 @@ function getParticipantMediaStatus({
 }
 
 export function ParticipantTile({ participant }: ParticipantTileProps) {
+  const isLocalParticipant = Boolean(participant.isLocal);
   const videoRef = useRef<HTMLVideoElement>(null);
   const playbackAttemptRef = useRef(0);
   const [isPlaybackBlocked, setIsPlaybackBlocked] = useState(false);
@@ -134,7 +139,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     hasLiveAudioTrack,
     hasVideoTrack,
     hasLiveVideoTrack,
-    isLocal: Boolean(participant.isLocal),
+    isLocal: isLocalParticipant,
     isPlaybackBlocked,
     isVideoReady,
   });
@@ -176,7 +181,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       return;
     }
 
-    if (!boundStream.getVideoTracks().some(isTrackUsable)) {
+    if (!boundStream.getVideoTracks().some((track) => isTrackUsable(track, isLocalParticipant))) {
       return;
     }
 
@@ -208,11 +213,15 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       return;
     }
 
-    const shouldMute = Boolean(participant.isLocal);
+    const shouldMute = isLocalParticipant;
     video.defaultMuted = shouldMute;
     video.muted = shouldMute;
-    const hasLiveAudioTrack = stream.getAudioTracks().some(isTrackUsable);
-    const hasLiveVideoTrack = stream.getVideoTracks().some(isTrackUsable);
+    const hasLiveAudioTrack = stream
+      .getAudioTracks()
+      .some((track) => isTrackUsable(track, isLocalParticipant));
+    const hasLiveVideoTrack = stream
+      .getVideoTracks()
+      .some((track) => isTrackUsable(track, isLocalParticipant));
     const hasLiveMediaTrack = hasLiveAudioTrack || hasLiveVideoTrack;
 
     if (video.srcObject !== stream) {
@@ -244,7 +253,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       setIsVideoReady(false);
       setIsPlaybackBlocked(hasLiveMediaTrack);
     }
-  }, [participant.isLocal, participant.stream, resetPlayback]);
+  }, [isLocalParticipant, participant.stream, resetPlayback]);
 
   useEffect(() => {
     const stream = participant.stream;
@@ -264,8 +273,12 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     const updateTrackState = () => {
       const audioTracks = stream.getAudioTracks();
       const videoTracks = stream.getVideoTracks();
-      const hasUsableAudioTrack = audioTracks.some(isTrackUsable);
-      const hasUsableVideoTrack = videoTracks.some(isTrackUsable);
+      const hasUsableAudioTrack = audioTracks.some((track) =>
+        isTrackUsable(track, isLocalParticipant)
+      );
+      const hasUsableVideoTrack = videoTracks.some((track) =>
+        isTrackUsable(track, isLocalParticipant)
+      );
 
       setHasAnyTrack(audioTracks.length > 0 || videoTracks.length > 0);
       setIsStreamActive(stream.active);
@@ -293,7 +306,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       trackedMediaTracks.add(track);
       const handleTrackStateChange = () => {
         updateTrackState();
-        if (isTrackUsable(track)) {
+        if (isTrackUsable(track, isLocalParticipant)) {
           void syncPlayback();
         }
       };
@@ -356,7 +369,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       stream.removeEventListener("addtrack", handleAddTrack);
       stream.removeEventListener("removetrack", handleRemoveTrack);
     };
-  }, [participant.stream, resetPlayback, syncPlayback]);
+  }, [isLocalParticipant, participant.stream, resetPlayback, syncPlayback]);
 
   useEffect(() => {
     const video = videoRef.current;
