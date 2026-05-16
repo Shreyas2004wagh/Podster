@@ -48,6 +48,7 @@ function getParticipantRoleLabel(role: Participant["role"]) {
 function getParticipantMediaStatus({
   hasStream,
   hasAnyTrack,
+  hasAudioTrack,
   isStreamActive,
   hasLiveAudioTrack,
   hasVideoTrack,
@@ -58,6 +59,7 @@ function getParticipantMediaStatus({
 }: {
   hasStream: boolean;
   hasAnyTrack: boolean;
+  hasAudioTrack: boolean;
   isStreamActive: boolean;
   hasLiveAudioTrack: boolean;
   hasVideoTrack: boolean;
@@ -107,6 +109,12 @@ function getParticipantMediaStatus({
     };
   }
 
+  if (hasAudioTrack) {
+    return {
+      message: isLocal ? "Microphone is muted" : "Microphone is unavailable",
+    };
+  }
+
   if (hasVideoTrack) {
     return {
       message: isLocal ? "Camera is paused" : "Camera is unavailable",
@@ -124,6 +132,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   const playbackAttemptRef = useRef(0);
   const [isPlaybackBlocked, setIsPlaybackBlocked] = useState(false);
   const [hasAnyTrack, setHasAnyTrack] = useState(false);
+  const [hasAudioTrack, setHasAudioTrack] = useState(false);
   const [isStreamActive, setIsStreamActive] = useState(false);
   const [hasLiveAudioTrack, setHasLiveAudioTrack] = useState(false);
   const [hasVideoTrack, setHasVideoTrack] = useState(false);
@@ -135,6 +144,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   const mediaStatus = getParticipantMediaStatus({
     hasStream: Boolean(participant.stream),
     hasAnyTrack,
+    hasAudioTrack,
     isStreamActive,
     hasLiveAudioTrack,
     hasVideoTrack,
@@ -261,6 +271,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       resetPlayback({ clearSource: true });
       setHasLiveAudioTrack(false);
       setHasAnyTrack(false);
+      setHasAudioTrack(false);
       setIsStreamActive(false);
       setHasVideoTrack(false);
       setHasLiveVideoTrack(false);
@@ -281,6 +292,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       );
 
       setHasAnyTrack(audioTracks.length > 0 || videoTracks.length > 0);
+      setHasAudioTrack(audioTracks.length > 0);
       setIsStreamActive(stream.active);
       setHasLiveAudioTrack(hasUsableAudioTrack);
       setHasVideoTrack(videoTracks.length > 0);
