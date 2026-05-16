@@ -109,6 +109,12 @@ function getParticipantMediaStatus({
     };
   }
 
+  if (hasAudioTrack && hasVideoTrack) {
+    return {
+      message: isLocal ? "Camera and microphone are paused" : "Participant media is unavailable",
+    };
+  }
+
   if (hasLiveAudioTrack) {
     return {
       message: isLocal ? "Audio only" : "Audio only participant",
