@@ -374,7 +374,9 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     };
     const handleStreamActive = () => {
       updateTrackState();
-      void syncPlayback();
+      if (stream.getTracks().some((track) => isTrackUsable(track, isLocalParticipant))) {
+        void syncPlayback();
+      }
     };
     const handleStreamInactive = () => {
       resetPlayback();
