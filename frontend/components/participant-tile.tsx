@@ -216,7 +216,6 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   }, []);
   const handlePlaybackError = useCallback(() => {
     setIsVideoReady(false);
-    setIsPlaybackBlocked(false);
   }, []);
 
   const syncPlayback = useCallback(async () => {
