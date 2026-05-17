@@ -360,7 +360,9 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     const handleAddTrack = (event: MediaStreamTrackEvent) => {
       subscribeTrack(event.track);
       updateTrackState();
-      void syncPlayback();
+      if (isTrackUsable(event.track, isLocalParticipant)) {
+        void syncPlayback();
+      }
     };
 
     const handleRemoveTrack = (event: MediaStreamTrackEvent) => {
