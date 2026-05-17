@@ -171,11 +171,8 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   const tileAriaLabel = mediaStatus
     ? `${participantName}, ${participantRoleLabel}, ${mediaStatus.message}${participant.isSpeaking ? ", speaking" : ""}`
     : `${participantName}, ${participantRoleLabel}${participant.isSpeaking ? ", speaking" : ""}`;
-  const liveAnnouncement = mediaStatus
-    ? `${participantName}: ${mediaStatus.message}${participant.isSpeaking ? ". Speaking." : ""}`
-    : participant.isSpeaking
-      ? `${participantName} is speaking.`
-      : undefined;
+  const mediaAnnouncement = mediaStatus ? `${participantName}: ${mediaStatus.message}` : undefined;
+  const speakingAnnouncement = participant.isSpeaking ? `${participantName} is speaking.` : undefined;
   const resetPlayback = useCallback((options?: { clearSource?: boolean }) => {
     setIsPlaybackBlocked(false);
     setIsVideoReady(false);
@@ -480,9 +477,14 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
           </div>
         )}
       </div>
-      {liveAnnouncement && (
+      {mediaAnnouncement && (
         <span className="sr-only" aria-live="polite" aria-atomic="true">
-          {liveAnnouncement}
+          {mediaAnnouncement}
+        </span>
+      )}
+      {speakingAnnouncement && (
+        <span className="sr-only" aria-live="polite" aria-atomic="true">
+          {speakingAnnouncement}
         </span>
       )}
       {participant.isSpeaking && (
