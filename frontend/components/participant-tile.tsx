@@ -140,6 +140,7 @@ function getParticipantMediaStatus({
 
 export function ParticipantTile({ participant }: ParticipantTileProps) {
   const isLocalParticipant = Boolean(participant.isLocal);
+  const hasParticipantStream = Boolean(participant.stream);
   const videoRef = useRef<HTMLVideoElement>(null);
   const playbackAttemptRef = useRef(0);
   const [isPlaybackBlocked, setIsPlaybackBlocked] = useState(false);
@@ -166,6 +167,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     isVideoReady,
   });
   const showVideoFeed = hasLiveVideoTrack && isVideoReady;
+  const isMediaBusy = Boolean(mediaStatus && hasParticipantStream && (isStreamActive || hasAnyTrack));
   const tileAriaLabel = mediaStatus
     ? `${participantName}, ${participantRoleLabel}, ${mediaStatus.message}${participant.isSpeaking ? ", speaking" : ""}`
     : `${participantName}, ${participantRoleLabel}${participant.isSpeaking ? ", speaking" : ""}`;
@@ -420,6 +422,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 via-white/3 to-white/0 p-4 shadow-lg"
       role="group"
       aria-label={tileAriaLabel}
+      aria-busy={isMediaBusy}
     >
       <div className="mb-3 flex items-center justify-between gap-3 text-sm text-white/90">
         <div className="min-w-0 flex-1 truncate font-semibold" title={participantName}>
