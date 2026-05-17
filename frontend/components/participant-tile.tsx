@@ -251,6 +251,11 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       return;
     }
 
+    if (video.srcObject === stream && !video.paused && !video.ended) {
+      setIsPlaybackBlocked(false);
+      return;
+    }
+
     const playbackAttempt = ++playbackAttemptRef.current;
 
     try {
