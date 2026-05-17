@@ -216,7 +216,6 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   }, []);
   const markVideoUnavailable = useCallback(() => {
     setIsVideoReady(false);
-    setIsPlaybackBlocked(false);
   }, []);
   const handlePlaybackError = useCallback(() => {
     setIsVideoReady(false);
