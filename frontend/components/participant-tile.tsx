@@ -174,9 +174,6 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     : participant.isSpeaking
       ? `${participantName} is speaking.`
       : undefined;
-  const clearBlockedPlayback = useCallback(() => {
-    setIsPlaybackBlocked(false);
-  }, []);
   const resetPlayback = useCallback((options?: { clearSource?: boolean }) => {
     setIsPlaybackBlocked(false);
     setIsVideoReady(false);
@@ -446,10 +443,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
           onPlaying={markVideoReady}
           onEnded={markVideoUnavailable}
           onError={handlePlaybackError}
-          onEmptied={() => {
-            clearBlockedPlayback();
-            markVideoUnavailable();
-          }}
+          onEmptied={markVideoUnavailable}
         />
         {mediaStatus && (
           <div
