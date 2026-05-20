@@ -152,6 +152,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   const hasParticipantStream = Boolean(participant.stream);
   const videoRef = useRef<HTMLVideoElement>(null);
   const playbackAttemptRef = useRef(0);
+  const previousSpeakingRef = useRef(Boolean(participant.isSpeaking));
   const [isPlaybackBlocked, setIsPlaybackBlocked] = useState(false);
   const [hasAnyTrack, setHasAnyTrack] = useState(false);
   const [hasAudioTrack, setHasAudioTrack] = useState(false);
@@ -161,6 +162,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   const [hasLiveVideoTrack, setHasLiveVideoTrack] = useState(false);
   const [hasVideoError, setHasVideoError] = useState(false);
   const [isVideoReady, setIsVideoReady] = useState(false);
+  const [speakingAnnouncement, setSpeakingAnnouncement] = useState("");
   const participantName = getParticipantDisplayName(participant);
   const participantRoleLabel = getParticipantRoleLabel(participant.role);
   const participantInitial = getParticipantInitial(participantName);
@@ -183,7 +185,18 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     ? `${participantName}, ${participantRoleLabel}, ${mediaStatus.message}${participant.isSpeaking ? ", speaking" : ""}`
     : `${participantName}, ${participantRoleLabel}${participant.isSpeaking ? ", speaking" : ""}`;
   const mediaAnnouncement = mediaStatus ? `${participantName}: ${mediaStatus.message}` : undefined;
-  const speakingAnnouncement = participant.isSpeaking ? `${participantName} is speaking.` : undefined;
+  useEffect(() => {
+    const isSpeaking = Boolean(participant.isSpeaking);
+    const wasSpeaking = previousSpeakingRef.current;
+
+    if (!wasSpeaking && isSpeaking) {
+      setSpeakingAnnouncement(`${participantName} is speaking.`);
+    } else if (wasSpeaking && !isSpeaking) {
+      setSpeakingAnnouncement("");
+    }
+
+    previousSpeakingRef.current = isSpeaking;
+  }, [participant.isSpeaking, participantName]);
   const resetPlayback = useCallback((options?: { clearSource?: boolean }) => {
     setIsPlaybackBlocked(false);
     setHasVideoError(false);
@@ -526,11 +539,9 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
           {mediaAnnouncement}
         </span>
       )}
-      {speakingAnnouncement && (
-        <span className="sr-only" aria-live="polite" aria-atomic="true">
-          {speakingAnnouncement}
-        </span>
-      )}
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {speakingAnnouncement}
+      </span>
       {participant.isSpeaking && (
         <div className="absolute inset-0 pointer-events-none border-2 border-emerald-400/60 rounded-2xl animate-pulse" />
       )}
