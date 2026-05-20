@@ -291,6 +291,14 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
 
     const trackedMediaTracks = new Set<MediaStreamTrack>();
     const trackStateListeners = new Map<MediaStreamTrack, () => void>();
+    let localTrackStateInterval: number | null = null;
+
+    const getLocalTrackEnabledSnapshot = () =>
+      stream
+        .getTracks()
+        .filter((track) => track.kind === "audio" || track.kind === "video")
+        .map((track) => `${track.kind}:${track.id}:${track.enabled ? "1" : "0"}`)
+        .join("|");
 
     const updateTrackState = () => {
       const audioTracks = stream.getAudioTracks();
@@ -389,12 +397,31 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     stream.addEventListener("removetrack", handleRemoveTrack);
     updateTrackState();
 
+    if (isLocalParticipant) {
+      let previousEnabledSnapshot = getLocalTrackEnabledSnapshot();
+      localTrackStateInterval = window.setInterval(() => {
+        const nextEnabledSnapshot = getLocalTrackEnabledSnapshot();
+        if (nextEnabledSnapshot === previousEnabledSnapshot) {
+          return;
+        }
+
+        previousEnabledSnapshot = nextEnabledSnapshot;
+        updateTrackState();
+        if (stream.getTracks().some((track) => isTrackUsable(track, isLocalParticipant))) {
+          void syncPlayback();
+        }
+      }, 250);
+    }
+
     return () => {
       Array.from(trackedMediaTracks).forEach(unsubscribeTrack);
       stream.removeEventListener("active", handleStreamActive);
       stream.removeEventListener("inactive", handleStreamInactive);
       stream.removeEventListener("addtrack", handleAddTrack);
       stream.removeEventListener("removetrack", handleRemoveTrack);
+      if (localTrackStateInterval !== null) {
+        window.clearInterval(localTrackStateInterval);
+      }
     };
   }, [isLocalParticipant, participant.stream, resetPlayback, syncPlayback]);
 
