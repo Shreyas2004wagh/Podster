@@ -55,6 +55,7 @@ function getParticipantMediaStatus({
   hasLiveVideoTrack,
   isLocal,
   isPlaybackBlocked,
+  hasVideoError,
   isVideoReady,
 }: {
   hasStream: boolean;
@@ -66,6 +67,7 @@ function getParticipantMediaStatus({
   hasLiveVideoTrack: boolean;
   isLocal: boolean;
   isPlaybackBlocked: boolean;
+  hasVideoError: boolean;
   isVideoReady: boolean;
 }): ParticipantMediaStatus | null {
   if (!hasStream) {
@@ -96,6 +98,13 @@ function getParticipantMediaStatus({
         ? "Browser playback is blocked."
         : "Browser audio playback is blocked.",
       resumeLabel: hasLiveVideoTrack ? "Resume playback" : "Resume audio",
+    };
+  }
+
+  if (hasVideoError && hasLiveVideoTrack) {
+    return {
+      message: isLocal ? "Camera preview failed" : "Video unavailable",
+      resumeLabel: isLocal ? "Retry preview" : "Retry video",
     };
   }
 
@@ -150,6 +159,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   const [hasLiveAudioTrack, setHasLiveAudioTrack] = useState(false);
   const [hasVideoTrack, setHasVideoTrack] = useState(false);
   const [hasLiveVideoTrack, setHasLiveVideoTrack] = useState(false);
+  const [hasVideoError, setHasVideoError] = useState(false);
   const [isVideoReady, setIsVideoReady] = useState(false);
   const participantName = getParticipantDisplayName(participant);
   const participantRoleLabel = getParticipantRoleLabel(participant.role);
@@ -164,6 +174,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     hasLiveVideoTrack,
     isLocal: isLocalParticipant,
     isPlaybackBlocked,
+    hasVideoError,
     isVideoReady,
   });
   const showVideoFeed = hasLiveVideoTrack && isVideoReady;
@@ -175,6 +186,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   const speakingAnnouncement = participant.isSpeaking ? `${participantName} is speaking.` : undefined;
   const resetPlayback = useCallback((options?: { clearSource?: boolean }) => {
     setIsPlaybackBlocked(false);
+    setHasVideoError(false);
     setIsVideoReady(false);
     playbackAttemptRef.current += 1;
 
@@ -208,12 +220,16 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     }
 
     setIsVideoReady(true);
+    setHasVideoError(false);
     setIsPlaybackBlocked(false);
-  }, []);
+  }, [isLocalParticipant]);
   const markVideoUnavailable = useCallback(() => {
     setIsVideoReady(false);
   }, []);
   const handlePlaybackError = useCallback(() => {
+    playbackAttemptRef.current += 1;
+    setIsPlaybackBlocked(false);
+    setHasVideoError(true);
     setIsVideoReady(false);
   }, []);
 
@@ -232,6 +248,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     const shouldMute = isLocalParticipant;
     video.defaultMuted = shouldMute;
     video.muted = shouldMute;
+    setHasVideoError(false);
     const hasLiveAudioTrack = stream
       .getAudioTracks()
       .some((track) => isTrackUsable(track, isLocalParticipant));
