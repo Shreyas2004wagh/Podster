@@ -110,7 +110,13 @@ function getParticipantMediaStatus({
 
   if (hasLiveVideoTrack && !isVideoReady) {
     return {
-      message: isLocal ? "Starting camera preview" : "Waiting for video",
+      message: hasLiveAudioTrack
+        ? isLocal
+          ? "Starting camera preview while audio stays live"
+          : "Video is starting while audio stays live"
+        : isLocal
+          ? "Starting camera preview"
+          : "Waiting for video",
     };
   }
 
