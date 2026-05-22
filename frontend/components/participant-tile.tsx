@@ -26,6 +26,14 @@ function isTrackUsable(track: MediaStreamTrack, isLocal: boolean) {
   return isTrackLive(track) && !track.muted && isTrackEnabled(track, isLocal);
 }
 
+function hasUsableVideoTrack(stream: MediaStream, isLocal: boolean) {
+  return stream.getVideoTracks().some((track) => isTrackUsable(track, isLocal));
+}
+
+function isPlaybackBlockError(error: unknown) {
+  return error instanceof DOMException && error.name === "NotAllowedError";
+}
+
 function getParticipantDisplayName(participant: Participant) {
   const rawName = typeof participant.name === "string" ? participant.name : "";
   const trimmedName = rawName.trim();
@@ -271,9 +279,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     const hasLiveAudioTrack = stream
       .getAudioTracks()
       .some((track) => isTrackUsable(track, isLocalParticipant));
-    const hasLiveVideoTrack = stream
-      .getVideoTracks()
-      .some((track) => isTrackUsable(track, isLocalParticipant));
+    const hasLiveVideoTrack = hasUsableVideoTrack(stream, isLocalParticipant);
     const hasLiveMediaTrack = hasLiveAudioTrack || hasLiveVideoTrack;
 
     if (video.srcObject !== stream) {
@@ -308,7 +314,8 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       }
 
       setIsVideoReady(false);
-      setIsPlaybackBlocked(hasLiveMediaTrack);
+      setIsPlaybackBlocked(isPlaybackBlockError(error) && hasLiveMediaTrack);
+      setHasVideoError(!isPlaybackBlockError(error) && hasLiveVideoTrack);
     }
   }, [isLocalParticipant, participant.stream, resetPlayback]);
 
