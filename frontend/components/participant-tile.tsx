@@ -251,8 +251,18 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     setIsPlaybackBlocked(false);
   }, [isLocalParticipant]);
   const markVideoUnavailable = useCallback(() => {
+    const video = videoRef.current;
+    const stream = participant.stream;
+    if (!video || (stream && video.srcObject !== stream)) {
+      return;
+    }
+
+    if (stream && hasUsableVideoTrack(stream, isLocalParticipant)) {
+      return;
+    }
+
     setIsVideoReady(false);
-  }, []);
+  }, [isLocalParticipant, participant.stream]);
   const handlePlaybackError = useCallback(() => {
     const video = videoRef.current;
     const stream = participant.stream;
