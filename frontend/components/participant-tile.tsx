@@ -254,11 +254,17 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     setIsVideoReady(false);
   }, []);
   const handlePlaybackError = useCallback(() => {
+    const video = videoRef.current;
+    const stream = participant.stream;
+    if (!video || !stream || video.srcObject !== stream || !hasUsableVideoTrack(stream, isLocalParticipant)) {
+      return;
+    }
+
     playbackAttemptRef.current += 1;
     setIsPlaybackBlocked(false);
     setHasVideoError(true);
     setIsVideoReady(false);
-  }, []);
+  }, [isLocalParticipant, participant.stream]);
 
   const syncPlayback = useCallback(async () => {
     const video = videoRef.current;
