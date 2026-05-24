@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { Participant } from "@/components/video-grid";
+import type { Participant } from "@/components/video-grid.types";
 
 interface ParticipantTileProps {
   participant: Participant;

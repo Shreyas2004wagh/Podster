@@ -1,13 +1,5 @@
 import { ParticipantTile } from "@/components/participant-tile";
-
-export interface Participant {
-  id: string;
-  name: string;
-  role: "host" | "guest";
-  stream?: MediaStream;
-  isLocal?: boolean;
-  isSpeaking?: boolean;
-}
+import type { Participant } from "@/components/video-grid.types";
 
 interface VideoGridProps {
   participants: Participant[];
