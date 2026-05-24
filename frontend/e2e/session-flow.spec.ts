@@ -107,7 +107,7 @@ test("guest can join a session and land in the recording room", async ({ page })
 
   await page.waitForURL(/\/sessions\/demo-session\/record$/, { timeout: 15_000 });
   await expect(page.getByRole("heading", { name: "Session demo-session" })).toBeVisible();
-  await expect(page.getByText("Guest 2")).toBeVisible();
+  await expect(page.getByText("Guest 2", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /start local recording/i })).toBeVisible();
 });
 
