@@ -309,7 +309,11 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     }
 
     if (video.srcObject === stream && !video.paused && !video.ended) {
-      setIsPlaybackBlocked(false);
+      if (hasLiveVideoTrack) {
+        markVideoReady();
+      } else {
+        setIsPlaybackBlocked(false);
+      }
       return;
     }
 
@@ -318,7 +322,11 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     try {
       await video.play();
       if (playbackAttempt === playbackAttemptRef.current) {
-        setIsPlaybackBlocked(false);
+        if (hasLiveVideoTrack) {
+          markVideoReady();
+        } else {
+          setIsPlaybackBlocked(false);
+        }
       }
     } catch (error) {
       if (playbackAttempt !== playbackAttemptRef.current) {
@@ -333,7 +341,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       setIsPlaybackBlocked(isPlaybackBlockError(error) && hasLiveMediaTrack);
       setHasVideoError(!isPlaybackBlockError(error) && hasLiveVideoTrack);
     }
-  }, [isLocalParticipant, participant.stream, resetPlayback]);
+  }, [isLocalParticipant, markVideoReady, participant.stream, resetPlayback]);
 
   useEffect(() => {
     const stream = participant.stream;
