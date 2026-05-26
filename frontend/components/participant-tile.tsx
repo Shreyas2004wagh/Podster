@@ -494,6 +494,19 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
 
   useEffect(() => {
     const video = videoRef.current;
+    if (!video) {
+      return;
+    }
+
+    video.addEventListener("resize", markVideoReady);
+
+    return () => {
+      video.removeEventListener("resize", markVideoReady);
+    };
+  }, [markVideoReady]);
+
+  useEffect(() => {
+    const video = videoRef.current;
     if (!video) return;
 
     if (!participant.stream) {
