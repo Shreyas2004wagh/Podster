@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Participant } from "@/components/video-grid.types";
@@ -135,6 +135,14 @@ function getParticipantMediaStatus({
   if (hasAudioTrack && hasVideoTrack && !hasLiveAudioTrack) {
     return {
       message: isLocal ? "Camera and microphone are paused" : "Participant media is unavailable",
+    };
+  }
+
+  if (hasLiveAudioTrack && hasVideoTrack) {
+    return {
+      message: isLocal
+        ? "Camera is paused while microphone stays live"
+        : "Camera is unavailable while audio stays live",
     };
   }
 
@@ -343,7 +351,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     }
   }, [isLocalParticipant, markVideoReady, participant.stream, resetPlayback]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const stream = participant.stream;
     if (!stream) {
       resetPlayback({ clearSource: true });
