@@ -374,6 +374,7 @@ export default function RecordingRoomPage() {
         name: viewer?.name ?? "You",
         role: viewer?.role ?? "host",
         isLocal: true,
+        mediaError: mediaError ?? undefined,
         stream: stream ?? undefined,
       },
       ...remoteParticipants.map((participant) => ({
@@ -383,7 +384,7 @@ export default function RecordingRoomPage() {
         stream: participant.stream,
       })),
     ],
-    [remoteParticipants, sessionId, stream, viewer]
+    [mediaError, remoteParticipants, sessionId, stream, viewer]
   );
 
   const handleClearLocal = async () => {
