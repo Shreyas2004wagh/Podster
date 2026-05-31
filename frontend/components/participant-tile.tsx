@@ -30,6 +30,12 @@ function hasUsableVideoTrack(stream: MediaStream, isLocal: boolean) {
   return stream.getVideoTracks().some((track) => isTrackUsable(track, isLocal));
 }
 
+function hasUsableMediaTrack(stream: MediaStream, isLocal: boolean) {
+  return stream
+    .getTracks()
+    .some((track) => (track.kind === "audio" || track.kind === "video") && isTrackUsable(track, isLocal));
+}
+
 function hasRenderableVideoFrame(video: HTMLVideoElement) {
   return (
     video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
@@ -475,7 +481,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     };
     const handleStreamActive = () => {
       updateTrackState();
-      if (stream.getTracks().some((track) => isTrackUsable(track, isLocalParticipant))) {
+      if (hasUsableMediaTrack(stream, isLocalParticipant)) {
         void syncPlayback();
       }
     };
@@ -501,7 +507,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
 
         previousEnabledSnapshot = nextEnabledSnapshot;
         updateTrackState();
-        if (stream.getTracks().some((track) => isTrackUsable(track, isLocalParticipant))) {
+        if (hasUsableMediaTrack(stream, isLocalParticipant)) {
           void syncPlayback();
         }
       }, 250);
