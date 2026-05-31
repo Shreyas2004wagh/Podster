@@ -37,18 +37,26 @@ export function useLocalMedia(options: UseLocalMediaOptions = { video: true, aud
   const lastOptions = useRef(options);
   const streamRef = useRef<MediaStream | null>(null);
   const startPromiseRef = useRef<Promise<MediaStream | null> | null>(null);
+  const isMountedRef = useRef(true);
+  const startAttemptRef = useRef(0);
 
   // Helper to safely set stream and ref
   const setStream = (newStream: MediaStream | null) => {
     streamRef.current = newStream;
-    setStreamState(newStream);
+    if (isMountedRef.current) {
+      setStreamState(newStream);
+    }
   };
 
   const stop = useCallback(() => {
+    startAttemptRef.current += 1;
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
     }
     setStream(null);
+    if (isMountedRef.current) {
+      setIsStarting(false);
+    }
   }, []);
 
   const start = useCallback(async () => {
@@ -64,11 +72,19 @@ export function useLocalMedia(options: UseLocalMediaOptions = { video: true, aud
 
     setIsStarting(true);
     setError(null);
-    startPromiseRef.current = (async () => {
+    const startAttempt = ++startAttemptRef.current;
+    const startPromise = (async () => {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: options.video,
         audio: options.audio
       });
+
+      const isStaleAttempt =
+        !isMountedRef.current || startAttempt !== startAttemptRef.current;
+      if (isStaleAttempt) {
+        mediaStream.getTracks().forEach((track) => track.stop());
+        return null;
+      }
 
       // Stop old stream if exists before setting new one (though usually start shouldn't be called if active)
       if (streamRef.current && streamRef.current.id !== mediaStream.id) {
@@ -79,16 +95,23 @@ export function useLocalMedia(options: UseLocalMediaOptions = { video: true, aud
       lastOptions.current = options;
       return mediaStream;
     })();
+    startPromiseRef.current = startPromise;
 
     try {
-      return await startPromiseRef.current;
+      return await startPromise;
     } catch (err) {
-      setError(getMediaErrorMessage(err));
+      if (isMountedRef.current && startAttempt === startAttemptRef.current) {
+        setError(getMediaErrorMessage(err));
+      }
       setStream(null);
       return null;
     } finally {
-      startPromiseRef.current = null;
-      setIsStarting(false);
+      if (startPromiseRef.current === startPromise) {
+        startPromiseRef.current = null;
+      }
+      if (isMountedRef.current && startAttempt === startAttemptRef.current) {
+        setIsStarting(false);
+      }
     }
   }, [options.audio, options.video]);
 
@@ -106,6 +129,8 @@ export function useLocalMedia(options: UseLocalMediaOptions = { video: true, aud
   // Cleanup on unmount ONLY
   useEffect(() => {
     return () => {
+      isMountedRef.current = false;
+      startAttemptRef.current += 1;
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
       }
