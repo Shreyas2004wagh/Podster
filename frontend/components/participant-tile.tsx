@@ -62,6 +62,7 @@ function getParticipantMediaStatus({
   hasVideoTrack,
   hasLiveVideoTrack,
   isLocal,
+  mediaError,
   isPlaybackBlocked,
   hasVideoError,
   isVideoReady,
@@ -74,13 +75,14 @@ function getParticipantMediaStatus({
   hasVideoTrack: boolean;
   hasLiveVideoTrack: boolean;
   isLocal: boolean;
+  mediaError?: string;
   isPlaybackBlocked: boolean;
   hasVideoError: boolean;
   isVideoReady: boolean;
 }): ParticipantMediaStatus | null {
   if (!hasStream) {
     return {
-      message: isLocal ? "Camera preview unavailable" : "Waiting for participant media",
+      message: mediaError ?? (isLocal ? "Waiting for camera and microphone" : "Waiting for participant media"),
     };
   }
 
@@ -197,6 +199,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     hasVideoTrack,
     hasLiveVideoTrack,
     isLocal: isLocalParticipant,
+    mediaError: participant.mediaError,
     isPlaybackBlocked,
     hasVideoError,
     isVideoReady,
