@@ -301,7 +301,6 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     setHasVideoError(true);
     setIsVideoReady(false);
   }, [isLocalParticipant, participant.stream]);
-
   const syncPlayback = useCallback(async () => {
     const video = videoRef.current;
     if (!video) {
@@ -375,6 +374,18 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       setHasVideoError(!isPlaybackBlockError(error) && hasLiveVideoTrack);
     }
   }, [isLocalParticipant, markVideoReady, participant.stream, resetPlayback]);
+  const handlePlaybackStall = useCallback(() => {
+    const video = videoRef.current;
+    const stream = participant.stream;
+    if (!video || !stream || video.srcObject !== stream || !hasUsableMediaTrack(stream, isLocalParticipant)) {
+      return;
+    }
+
+    if (hasUsableVideoTrack(stream, isLocalParticipant)) {
+      setIsVideoReady(false);
+    }
+    void syncPlayback();
+  }, [isLocalParticipant, participant.stream, syncPlayback]);
 
   useLayoutEffect(() => {
     const stream = participant.stream;
@@ -592,6 +603,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
           onEnded={markVideoUnavailable}
           onError={handlePlaybackError}
           onEmptied={markVideoUnavailable}
+          onStalled={handlePlaybackStall}
         />
         {mediaStatus && (
           <div
