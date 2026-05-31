@@ -30,6 +30,10 @@ function hasUsableVideoTrack(stream: MediaStream, isLocal: boolean) {
   return stream.getVideoTracks().some((track) => isTrackUsable(track, isLocal));
 }
 
+function isRemoteTrackPending(track: MediaStreamTrack, isLocal: boolean) {
+  return !isLocal && isTrackLive(track) && track.muted;
+}
+
 function hasUsableMediaTrack(stream: MediaStream, isLocal: boolean) {
   return stream
     .getTracks()
@@ -75,6 +79,7 @@ function getParticipantMediaStatus({
   hasLiveAudioTrack,
   hasVideoTrack,
   hasLiveVideoTrack,
+  hasPendingVideoTrack,
   isLocal,
   mediaError,
   isPlaybackBlocked,
@@ -88,6 +93,7 @@ function getParticipantMediaStatus({
   hasLiveAudioTrack: boolean;
   hasVideoTrack: boolean;
   hasLiveVideoTrack: boolean;
+  hasPendingVideoTrack: boolean;
   isLocal: boolean;
   mediaError?: string;
   isPlaybackBlocked: boolean;
@@ -132,7 +138,7 @@ function getParticipantMediaStatus({
     };
   }
 
-  if (hasLiveVideoTrack && !isVideoReady) {
+  if ((hasLiveVideoTrack || hasPendingVideoTrack) && !isVideoReady) {
     return {
       message: hasLiveAudioTrack
         ? isLocal
@@ -198,6 +204,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   const [hasLiveAudioTrack, setHasLiveAudioTrack] = useState(false);
   const [hasVideoTrack, setHasVideoTrack] = useState(false);
   const [hasLiveVideoTrack, setHasLiveVideoTrack] = useState(false);
+  const [hasPendingVideoTrack, setHasPendingVideoTrack] = useState(false);
   const [hasVideoError, setHasVideoError] = useState(false);
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [speakingAnnouncement, setSpeakingAnnouncement] = useState("");
@@ -212,6 +219,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
     hasLiveAudioTrack,
     hasVideoTrack,
     hasLiveVideoTrack,
+    hasPendingVideoTrack,
     isLocal: isLocalParticipant,
     mediaError: participant.mediaError,
     isPlaybackBlocked,
@@ -326,7 +334,10 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       .getAudioTracks()
       .some((track) => isTrackUsable(track, isLocalParticipant));
     const hasLiveVideoTrack = hasUsableVideoTrack(stream, isLocalParticipant);
-    const hasLiveMediaTrack = hasLiveAudioTrack || hasLiveVideoTrack;
+    const hasPendingVideoTrack = stream
+      .getVideoTracks()
+      .some((track) => isRemoteTrackPending(track, isLocalParticipant));
+    const hasLiveMediaTrack = hasLiveAudioTrack || hasLiveVideoTrack || hasPendingVideoTrack;
 
     if (video.srcObject !== stream) {
       video.srcObject = stream;
@@ -402,6 +413,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       setIsStreamActive(false);
       setHasVideoTrack(false);
       setHasLiveVideoTrack(false);
+      setHasPendingVideoTrack(false);
       return;
     }
 
@@ -425,6 +437,9 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       const hasUsableVideoTrack = videoTracks.some((track) =>
         isTrackUsable(track, isLocalParticipant)
       );
+      const hasPendingRemoteVideoTrack = videoTracks.some((track) =>
+        isRemoteTrackPending(track, isLocalParticipant)
+      );
 
       setHasAnyTrack(audioTracks.length > 0 || videoTracks.length > 0);
       setHasAudioTrack(audioTracks.length > 0);
@@ -432,7 +447,8 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       setHasLiveAudioTrack(hasUsableAudioTrack);
       setHasVideoTrack(videoTracks.length > 0);
       setHasLiveVideoTrack(hasUsableVideoTrack);
-      if (!hasUsableAudioTrack && !hasUsableVideoTrack) {
+      setHasPendingVideoTrack(hasPendingRemoteVideoTrack);
+      if (!hasUsableAudioTrack && !hasUsableVideoTrack && !hasPendingRemoteVideoTrack) {
         resetPlayback();
         return;
       }
