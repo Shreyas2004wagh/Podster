@@ -30,6 +30,13 @@ function hasUsableVideoTrack(stream: MediaStream, isLocal: boolean) {
   return stream.getVideoTracks().some((track) => isTrackUsable(track, isLocal));
 }
 
+function hasRenderableVideoFrame(video: HTMLVideoElement) {
+  return (
+    video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA ||
+    video.videoWidth > 0
+  );
+}
+
 function isPlaybackBlockError(error: unknown) {
   return error instanceof DOMException && error.name === "NotAllowedError";
 }
@@ -253,7 +260,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       return;
     }
 
-    if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth === 0) {
+    if (!hasRenderableVideoFrame(video)) {
       return;
     }
 
