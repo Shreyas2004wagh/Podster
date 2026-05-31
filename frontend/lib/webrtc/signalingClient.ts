@@ -41,6 +41,7 @@ type RoomErrorPayload = {
 
 type SignalingEventMap = {
   connect: () => void;
+  "connect_error": (error: Error) => void;
   disconnect: (reason: string) => void;
   "user-joined": (payload: UserJoinedPayload) => void;
   "user-left": (payload: UserLeftPayload) => void;

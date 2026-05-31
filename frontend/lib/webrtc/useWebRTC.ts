@@ -25,6 +25,29 @@ const STUN_SERVERS = {
     ]
 };
 
+function getSignalingConnectErrorMessage(error: unknown) {
+    if (error instanceof Error && error.message.trim().length > 0) {
+        return error.message;
+    }
+
+    return "Failed to connect to live session signaling.";
+}
+
+function getSignalingDisconnectMessage(reason: string) {
+    switch (reason) {
+        case "io server disconnect":
+            return "Live session signaling was closed by the server.";
+        case "transport close":
+        case "transport error":
+        case "ping timeout":
+            return "Live session signaling was interrupted. Reconnecting...";
+        default:
+            return reason === "io client disconnect"
+                ? null
+                : "Live session signaling disconnected.";
+    }
+}
+
 export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
     const signaling = useRef<SignalingClient | null>(null);
     const peers = useRef<Map<string, RTCPeerConnection>>(new Map());
@@ -274,12 +297,27 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
         setSignalingError(null);
         const client = new SignalingClient({ sessionId });
         signaling.current = client;
+        const peerConnections = peers.current;
+        const participantMetaById = participantMeta.current;
+        const queuedIceCandidates = pendingIceCandidates.current;
+        const pendingDisconnectTimers = disconnectTimers.current;
 
         const handleConnect = () => {
             setSignalingError(null);
         };
+        const handleConnectError = (error: Error) => {
+            setSignalingError(getSignalingConnectErrorMessage(error));
+        };
+        const handleDisconnect = (reason: string) => {
+            const message = getSignalingDisconnectMessage(reason);
+            if (message) {
+                setSignalingError(message);
+            }
+        };
 
         client.on("connect", handleConnect);
+        client.on("connect_error", handleConnectError);
+        client.on("disconnect", handleDisconnect);
         client.on("user-joined", handleUserJoined);
         client.on("user-left", handleUserLeft);
         client.on("offer", handleOffer);
@@ -291,6 +329,8 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
 
         return () => {
             client.off("connect", handleConnect);
+            client.off("connect_error", handleConnectError);
+            client.off("disconnect", handleDisconnect);
             client.off("user-joined", handleUserJoined);
             client.off("user-left", handleUserLeft);
             client.off("offer", handleOffer);
@@ -298,12 +338,12 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
             client.off("ice-candidate", handleCandidate);
             client.off("room-error", handleRoomError);
             client.disconnect();
-            peers.current.forEach((pc) => pc.close());
-            peers.current.clear();
-            participantMeta.current.clear();
-            pendingIceCandidates.current.clear();
-            disconnectTimers.current.forEach((timer) => window.clearTimeout(timer));
-            disconnectTimers.current.clear();
+            peerConnections.forEach((pc) => pc.close());
+            peerConnections.clear();
+            participantMetaById.clear();
+            queuedIceCandidates.clear();
+            pendingDisconnectTimers.forEach((timer) => window.clearTimeout(timer));
+            pendingDisconnectTimers.clear();
             setRemoteParticipants([]);
         };
     }, [sessionId, handleUserJoined, handleUserLeft, handleOffer, handleAnswer, handleCandidate, handleRoomError]);
