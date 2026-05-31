@@ -227,11 +227,16 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
   useEffect(() => {
     const isSpeaking = Boolean(participant.isSpeaking);
     const wasSpeaking = previousSpeakingRef.current;
+    const nextSpeakingAnnouncement = `${participantName} is speaking.`;
 
     if (!wasSpeaking && isSpeaking) {
-      setSpeakingAnnouncement(`${participantName} is speaking.`);
+      setSpeakingAnnouncement(nextSpeakingAnnouncement);
     } else if (wasSpeaking && !isSpeaking) {
       setSpeakingAnnouncement("");
+    } else if (isSpeaking) {
+      setSpeakingAnnouncement((currentAnnouncement) =>
+        currentAnnouncement === nextSpeakingAnnouncement ? currentAnnouncement : nextSpeakingAnnouncement
+      );
     }
 
     previousSpeakingRef.current = isSpeaking;
