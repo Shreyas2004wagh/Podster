@@ -328,7 +328,14 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       return;
     }
 
-    if (video.srcObject === stream && !video.paused && !video.ended) {
+    const isElementHealthy =
+      video.srcObject === stream &&
+      !video.paused &&
+      !video.ended &&
+      video.error === null &&
+      (!hasLiveVideoTrack || hasRenderableVideoFrame(video));
+
+    if (isElementHealthy) {
       if (hasLiveVideoTrack) {
         markVideoReady();
       } else {
