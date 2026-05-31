@@ -289,6 +289,7 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
       return;
     }
 
+    video.pause();
     playbackAttemptRef.current += 1;
     setIsPlaybackBlocked(false);
     setHasVideoError(true);
