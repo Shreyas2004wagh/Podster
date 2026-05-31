@@ -32,8 +32,9 @@ function hasUsableVideoTrack(stream: MediaStream, isLocal: boolean) {
 
 function hasRenderableVideoFrame(video: HTMLVideoElement) {
   return (
-    video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA ||
-    video.videoWidth > 0
+    video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+    video.videoWidth > 0 &&
+    video.videoHeight > 0
   );
 }
 
