@@ -372,7 +372,7 @@ export default function RecordingRoomPage() {
       {
         id: viewer?.userId ?? `viewer-${sessionId}`,
         name: viewer?.name ?? "You",
-        role: viewer?.role ?? "host",
+        role: viewer?.role ?? "guest",
         isLocal: true,
         mediaError: mediaError ?? undefined,
         stream: stream ?? undefined,

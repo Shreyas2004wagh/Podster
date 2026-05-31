@@ -264,6 +264,7 @@ test("invalid stored viewer state is discarded before entering the recording flo
 
   await expect(page.getByText(/participant identity is missing in this browser/i)).toBeVisible();
   await expect(page.getByRole("button", { name: /start local recording/i })).toBeDisabled();
+  await expect(page.getByRole("group", { name: /You, Guest/i })).toBeVisible();
   await expect(
     page.evaluate((storageKey) => window.localStorage.getItem(storageKey), `podster.viewer.${sessionId}`)
   ).resolves.toBeNull();
