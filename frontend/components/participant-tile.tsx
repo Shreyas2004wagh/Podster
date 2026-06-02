@@ -468,7 +468,12 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
 
       trackedMediaTracks.add(track);
       const handleTrackStateChange = () => {
+        const trackEnded = track.readyState === "ended";
         updateTrackState();
+        if (trackEnded) {
+          unsubscribeTrack(track);
+          return;
+        }
         if (isTrackUsable(track, isLocalParticipant)) {
           void syncPlayback();
         }

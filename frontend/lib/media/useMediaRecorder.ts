@@ -53,8 +53,15 @@ export function useMediaRecorder({
   const pendingChunkSaves = useRef<Promise<void>[]>([]);
   const shouldNotifyOnStop = useRef(false);
   const hasChunkPersistenceFailure = useRef(false);
+  const isMountedRef = useRef(true);
 
   const canRecord = useMemo(() => getMediaRecorderConstructor() !== null, []);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -124,6 +131,9 @@ export function useMediaRecorder({
         createdAt: Date.now(),
         userId
       }).catch((error) => {
+        if (!isMountedRef.current) {
+          throw error;
+        }
         hasChunkPersistenceFailure.current = true;
         const message =
           error instanceof Error ? error.message : "Failed to persist a recording chunk.";
@@ -144,6 +154,9 @@ export function useMediaRecorder({
     recorder.onerror = (err) => {
       shouldNotifyOnStop.current = false;
       recorderRef.current = null;
+      if (!isMountedRef.current) {
+        return;
+      }
       setStartedAt(null);
       setIsRecording(false);
       setIsProcessing(false);
@@ -157,6 +170,9 @@ export function useMediaRecorder({
       void (async () => {
         const results = await Promise.allSettled(pendingChunkSaves.current);
         pendingChunkSaves.current = [];
+        if (!isMountedRef.current) {
+          return;
+        }
         const hadPersistenceFailure =
           hasChunkPersistenceFailure.current ||
           results.some((result) => result.status === "rejected");
