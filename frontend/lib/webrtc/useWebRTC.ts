@@ -90,6 +90,20 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
         });
     }, [getParticipantMeta]);
 
+    const closePeerConnection = useCallback((id: string) => {
+        const pc = peers.current.get(id);
+        if (!pc) {
+            return;
+        }
+
+        pc.onicecandidate = null;
+        pc.ontrack = null;
+        pc.onconnectionstatechange = null;
+        pc.onnegotiationneeded = null;
+        pc.close();
+        peers.current.delete(id);
+    }, []);
+
     const removeParticipant = useCallback((id: string) => {
         const disconnectTimer = disconnectTimers.current.get(id);
         if (disconnectTimer) {
@@ -99,12 +113,8 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
         setRemoteParticipants((prev) => prev.filter((p) => p.id !== id));
         participantMeta.current.delete(id);
         pendingIceCandidates.current.delete(id);
-        const pc = peers.current.get(id);
-        if (pc) {
-            pc.close();
-            peers.current.delete(id);
-        }
-    }, []);
+        closePeerConnection(id);
+    }, [closePeerConnection]);
 
     const flushPendingIceCandidates = useCallback(async (id: string, pc: RTCPeerConnection) => {
         const queued = pendingIceCandidates.current.get(id);
@@ -328,6 +338,7 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
         client.connect();
 
         return () => {
+            signaling.current = null;
             client.off("connect", handleConnect);
             client.off("connect_error", handleConnectError);
             client.off("disconnect", handleDisconnect);
@@ -338,7 +349,7 @@ export function useWebRTC({ sessionId, stream }: UseWebRTCOptions) {
             client.off("ice-candidate", handleCandidate);
             client.off("room-error", handleRoomError);
             client.disconnect();
-            peerConnections.forEach((pc) => pc.close());
+            Array.from(peerConnections.keys()).forEach((id) => closePeerConnection(id));
             peerConnections.clear();
             participantMetaById.clear();
             queuedIceCandidates.clear();
