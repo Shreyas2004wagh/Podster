@@ -132,7 +132,7 @@ export function useMediaRecorder({
         userId
       }).catch((error) => {
         if (!isMountedRef.current) {
-          throw error;
+          return;
         }
         hasChunkPersistenceFailure.current = true;
         const message =
