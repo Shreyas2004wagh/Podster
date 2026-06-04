@@ -22,8 +22,8 @@ export async function joinSession(sessionId: SessionId, payload: { guestName: st
   });
 }
 
-export async function getSession(sessionId: SessionId) {
-  return apiFetch<Session>(`/sessions/${sessionId}`);
+export async function getSession(sessionId: SessionId, options: RequestInit = {}) {
+  return apiFetch<Session>(`/sessions/${sessionId}`, options);
 }
 
 export async function requestUploadUrls(

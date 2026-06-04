@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import type { Session } from "@podster/shared";
 import { Card } from "@/components/ui/card";
@@ -15,6 +15,8 @@ export default function SessionDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const loadSessionAbortRef = useRef<AbortController | null>(null);
+  const isRefreshingRef = useRef(false);
 
   const completedTrackCount = useMemo(
     () => session?.tracks?.filter((track) => Boolean(track.completedAt)).length ?? 0,
@@ -25,18 +27,38 @@ export default function SessionDashboardPage() {
     async (showSpinner: boolean) => {
       if (!sessionId) return;
 
+      if (!showSpinner && isRefreshingRef.current) {
+        isRefreshingRef.current = false;
+        setIsRefreshing(false);
+      }
+
+      loadSessionAbortRef.current?.abort();
+      const controller = new AbortController();
+      loadSessionAbortRef.current = controller;
+
       if (showSpinner) {
+        isRefreshingRef.current = true;
         setIsRefreshing(true);
       }
 
       try {
         setError(null);
-        const nextSession = await getSession(sessionId);
+        const nextSession = await getSession(sessionId, { signal: controller.signal });
+        if (controller.signal.aborted) {
+          return;
+        }
         setSession(nextSession);
       } catch (err) {
+        if (controller.signal.aborted) {
+          return;
+        }
         setError((err as Error).message);
       } finally {
-        if (showSpinner) {
+        if (loadSessionAbortRef.current === controller) {
+          loadSessionAbortRef.current = null;
+        }
+        if (showSpinner && !controller.signal.aborted && isRefreshingRef.current) {
+          isRefreshingRef.current = false;
           setIsRefreshing(false);
         }
       }
@@ -53,6 +75,7 @@ export default function SessionDashboardPage() {
     }, 15_000);
 
     return () => {
+      loadSessionAbortRef.current?.abort();
       window.clearInterval(interval);
     };
   }, [loadSession, sessionId]);
