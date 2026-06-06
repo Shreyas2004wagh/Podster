@@ -4,6 +4,6 @@ export interface Participant {
   role: "host" | "guest";
   stream?: MediaStream;
   mediaError?: string;
-  isLocal?: boolean;
+  isLocal: boolean;
   isSpeaking?: boolean;
 }
