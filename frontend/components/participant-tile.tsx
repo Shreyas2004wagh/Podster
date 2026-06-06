@@ -511,10 +511,15 @@ export function ParticipantTile({ participant }: ParticipantTileProps) {
 
     const handleRemoveTrack = (event: MediaStreamTrackEvent) => {
       unsubscribeTrack(event.track);
+      updateTrackState();
       if (event.track.kind === "video") {
+        if (hasUsableVideoTrack(stream, isLocalParticipant)) {
+          void syncPlayback();
+          return;
+        }
+
         setIsVideoReady(false);
       }
-      updateTrackState();
     };
     const handleStreamActive = () => {
       updateTrackState();
