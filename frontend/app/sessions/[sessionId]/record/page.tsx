@@ -381,6 +381,7 @@ export default function RecordingRoomPage() {
         id: participant.id,
         name: participant.name,
         role: participant.role,
+        isLocal: false,
         stream: participant.stream,
       })),
     ],
