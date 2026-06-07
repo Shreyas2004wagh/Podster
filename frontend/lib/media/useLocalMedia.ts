@@ -50,6 +50,7 @@ export function useLocalMedia(options: UseLocalMediaOptions = { video: true, aud
 
   const stop = useCallback(() => {
     startAttemptRef.current += 1;
+    startPromiseRef.current = null;
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
     }
