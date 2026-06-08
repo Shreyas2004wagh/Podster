@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 function buildSession(id: string, title: string, hostId: string) {
   const timestamp = new Date("2026-03-20T00:00:00.000Z").toISOString();
@@ -29,6 +29,25 @@ function seedNote(sessionId: string, userId: string, notes: string) {
     key: `podster.notes.${sessionId}.${userId}`,
     value: notes
   };
+}
+
+async function mockLocalMediaCapture(page: Page) {
+  await page.addInitScript(() => {
+    const getUserMedia = async () => new MediaStream();
+
+    if (!navigator.mediaDevices) {
+      Object.defineProperty(navigator, "mediaDevices", {
+        configurable: true,
+        value: { getUserMedia }
+      });
+      return;
+    }
+
+    Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
+      configurable: true,
+      value: getUserMedia
+    });
+  });
 }
 
 test("host can create a session and reach the recording room", async ({ page }) => {
@@ -64,6 +83,7 @@ test("host can create a session and reach the recording room", async ({ page }) 
 
 test("guest can record locally without seeing the host start control path", async ({ page }) => {
   const sessionId = "session-guest";
+  await mockLocalMediaCapture(page);
   await page.addInitScript(({ key, value }) => {
     window.localStorage.setItem(key, JSON.stringify(value));
   }, seedViewer(sessionId, {

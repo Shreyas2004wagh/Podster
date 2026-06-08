@@ -39,6 +39,8 @@ export function useLocalMedia(options: UseLocalMediaOptions = { video: true, aud
   const startPromiseRef = useRef<Promise<MediaStream | null> | null>(null);
   const isMountedRef = useRef(true);
   const startAttemptRef = useRef(0);
+  const requestedAudio = options.audio;
+  const requestedVideo = options.video;
 
   // Helper to safely set stream and ref
   const setStream = (newStream: MediaStream | null) => {
@@ -76,8 +78,8 @@ export function useLocalMedia(options: UseLocalMediaOptions = { video: true, aud
     const startAttempt = ++startAttemptRef.current;
     const startPromise = (async () => {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: options.video,
-        audio: options.audio
+        video: requestedVideo,
+        audio: requestedAudio
       });
 
       const isStaleAttempt =
@@ -93,7 +95,10 @@ export function useLocalMedia(options: UseLocalMediaOptions = { video: true, aud
       }
 
       setStream(mediaStream);
-      lastOptions.current = options;
+      lastOptions.current = {
+        audio: requestedAudio,
+        video: requestedVideo
+      };
       return mediaStream;
     })();
     startPromiseRef.current = startPromise;
@@ -114,7 +119,7 @@ export function useLocalMedia(options: UseLocalMediaOptions = { video: true, aud
         setIsStarting(false);
       }
     }
-  }, [options.audio, options.video]);
+  }, [requestedAudio, requestedVideo]);
 
   // Handle constraints change
   useEffect(() => {
@@ -129,9 +134,12 @@ export function useLocalMedia(options: UseLocalMediaOptions = { video: true, aud
 
   // Cleanup on unmount ONLY
   useEffect(() => {
+    isMountedRef.current = true;
+
     return () => {
       isMountedRef.current = false;
       startAttemptRef.current += 1;
+      startPromiseRef.current = null;
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
       }
