@@ -15,7 +15,7 @@ export default fp(async (fastify) => {
   const metrics = new PrometheusMetrics();
 
   // Add metrics to request context
-  fastify.addHook("onRequest", (request) => {
+  fastify.addHook("onRequest", async (request) => {
     request.metrics = metrics;
     
     // Increment in-flight requests
@@ -26,7 +26,7 @@ export default fp(async (fastify) => {
   });
 
   // Record metrics on response
-  fastify.addHook("onResponse", (request, reply) => {
+  fastify.addHook("onResponse", async (request, reply) => {
     const duration = Date.now() - (request.metricsStartTime ?? Date.now());
     
     // Decrement in-flight requests
