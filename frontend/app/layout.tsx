@@ -10,7 +10,7 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Podster | Remote recording for podcasters",
   description:
-    "Riverside-style remote recording MVP with local capture, resumable uploads, and a clean UX.",
+    "A browser studio for remote podcasts with local track capture and upload-after-stop recovery.",
 };
 
 export default function RootLayout({
@@ -25,7 +25,7 @@ export default function RootLayout({
           <header className="sticky top-0 z-20 border-b border-white/5 bg-black/50 backdrop-blur">
             <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
               <div className="text-lg font-semibold tracking-tight text-white">Podster</div>
-              <div className="flex items-center gap-3 text-sm text-slate-200">
+              <div className="hidden items-center gap-3 text-sm text-slate-200 sm:flex">
                 <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-emerald-200">
                   Local-first recording
                 </span>
