@@ -146,9 +146,10 @@ export function useMediaRecorder({
         throw error;
       });
       pendingChunkSaves.current.push(savePromise);
-      void savePromise.finally(() => {
+      const removePendingSave = () => {
         pendingChunkSaves.current = pendingChunkSaves.current.filter((pending) => pending !== savePromise);
-      });
+      };
+      void savePromise.then(removePendingSave, removePendingSave);
     };
 
     recorder.onerror = (err) => {
