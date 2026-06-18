@@ -85,7 +85,7 @@ Important variables:
 | `GUEST_JWT_SECRET` | Backend | Guest auth token signing secret |
 | `COOKIE_SECRET` | Backend | Signed cookie secret |
 | `DATABASE_URL` | Backend/Prisma | PostgreSQL connection string |
-| `STORAGE_PROVIDER` | Backend | `s3` or `r2`; local storage is not implemented |
+| `STORAGE_PROVIDER` | Backend | `s3` or `r2` |
 | `STORAGE_BUCKET` | Backend | Object-storage bucket name |
 | `STORAGE_REGION` | Backend | S3/R2 region |
 | `STORAGE_ACCESS_KEY` | Backend | Storage access key |
@@ -274,7 +274,7 @@ Socket.IO handles:
 - Migrations live in `backend/prisma/migrations`.
 - Authentication uses separate host and guest JWT secrets.
 - The backend intentionally keeps signaling and recording/storage logic separate.
-- `STORAGE_PROVIDER=local` is not implemented; use `s3` or `r2`.
+- `STORAGE_PROVIDER` accepts `s3` or `r2`; use `s3` for MinIO and other S3-compatible local endpoints.
 
 ## Deployment Notes
 

@@ -583,11 +583,9 @@ export class SessionService implements ISessionService {
   }
 
   private resolveStorageProvider(): StorageProvider {
-    switch (process.env.STORAGE_PROVIDER) {
+    switch (env.STORAGE_PROVIDER) {
       case "r2":
         return StorageProvider.R2;
-      case "local":
-        return StorageProvider.LOCAL;
       case "s3":
       default:
         return StorageProvider.S3;

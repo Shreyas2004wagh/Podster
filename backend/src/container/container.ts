@@ -87,8 +87,6 @@ function createStorageProvider(): IStorageProvider {
     case "s3":
     case "r2":
       return new S3StorageProvider();
-    case "local":
-      throw new Error("Local storage provider not implemented. Set STORAGE_PROVIDER=s3 or STORAGE_PROVIDER=r2.");
     default: {
       const _exhaustive: never = env.STORAGE_PROVIDER;
       return _exhaustive;

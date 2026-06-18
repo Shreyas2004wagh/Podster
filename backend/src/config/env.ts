@@ -42,7 +42,7 @@ const envSchema = z.object({
   STORAGE_ACCESS_KEY: z.string().default(""),
   STORAGE_SECRET_KEY: z.string().default(""),
   STORAGE_BUCKET: z.string().default("podster"),
-  STORAGE_PROVIDER: z.enum(["s3", "r2", "local"]).default("s3"),
+  STORAGE_PROVIDER: z.enum(["s3", "r2"]).default("s3"),
   STORAGE_FORCE_PATH_STYLE: z
     .string()
     .optional()
@@ -118,22 +118,20 @@ const envSchema = z.object({
     });
   }
 
-  if (env.STORAGE_PROVIDER !== "local") {
-    if (!env.STORAGE_ACCESS_KEY.trim()) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["STORAGE_ACCESS_KEY"],
-        message: "STORAGE_ACCESS_KEY is required in production"
-      });
-    }
+  if (!env.STORAGE_ACCESS_KEY.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["STORAGE_ACCESS_KEY"],
+      message: "STORAGE_ACCESS_KEY is required in production"
+    });
+  }
 
-    if (!env.STORAGE_SECRET_KEY.trim()) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["STORAGE_SECRET_KEY"],
-        message: "STORAGE_SECRET_KEY is required in production"
-      });
-    }
+  if (!env.STORAGE_SECRET_KEY.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["STORAGE_SECRET_KEY"],
+      message: "STORAGE_SECRET_KEY is required in production"
+    });
   }
 
   if (env.COOKIE_SAME_SITE === "none" && !env.COOKIE_DOMAIN?.trim() && !env.RENDER_EXTERNAL_URL) {
