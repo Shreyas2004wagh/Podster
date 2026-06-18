@@ -249,8 +249,8 @@ Core backend endpoints:
 - `POST /sessions/:id/upload-urls` - request signed multipart upload URLs
 - `POST /sessions/:id/complete-upload` - complete an uploaded track
 - `GET /sessions/:id/tracks/:trackId/download` - get a signed track download URL
-- `GET /sessions/:id/recording` - get a signed combined-recording URL
-- `GET /api/sessions/:id/recording` - alternate recording URL route
+- `GET /sessions/:id/recording` - get a signed URL for the latest completed video recording
+- `GET /api/sessions/:id/recording` - alternate latest-recording URL route
 - `GET /health`, `GET /ready`, `GET /live` - service health checks
 
 Socket.IO handles:
