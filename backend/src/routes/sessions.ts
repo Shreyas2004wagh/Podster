@@ -1,5 +1,6 @@
 import fp from "fastify-plugin";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { SessionStatus } from "@prisma/client";
 
 /**
  * @openapi
@@ -341,6 +342,10 @@ export default fp(async (fastify) => {
       const session = await service.getSession(sessionId);
       if (!session) {
         reply.code(404).send({ message: "Session not found" });
+        return;
+      }
+      if (session.status === SessionStatus.COMPLETE) {
+        reply.code(409).send({ message: "Completed sessions cannot be joined" });
         return;
       }
       const body = z.object({ guestName: z.string().trim().min(1) }).parse(request.body);
