@@ -209,6 +209,37 @@ test("requestUploadUrls marks the session as uploading and persists upload metad
   assert.ok(createdTargets[0]!.expiresAt.getTime() - Date.now() >= 59 * 60 * 1000);
 });
 
+test("requestUploadUrls rejects completed sessions before creating upload state", async () => {
+  let storageCalled = false;
+  let sessionUpdated = false;
+
+  const service = new SessionService(
+    createSessionRepositoryMock({
+      findById: async () => createSession({ status: SessionStatus.COMPLETE }),
+      update: async () => {
+        sessionUpdated = true;
+        return createSession({ status: SessionStatus.UPLOADING });
+      }
+    }),
+    createTrackRepositoryMock(),
+    createUploadTargetRepositoryMock(),
+    createStorageProviderMock({
+      createMultipartUpload: async () => {
+        storageCalled = true;
+        return { uploadId: "upload-1", urls: ["https://example.test/part-1"] };
+      }
+    })
+  );
+
+  await assert.rejects(
+    service.requestUploadUrls("session-1", "guest-1", 1),
+    (error: unknown) =>
+      error instanceof SessionConflictError && /completed/i.test(error.message)
+  );
+  assert.equal(storageCalled, false);
+  assert.equal(sessionUpdated, false);
+});
+
 test("requestUploadUrls rejects duplicate active uploads for the same participant", async () => {
   let storageCalled = false;
 
@@ -555,6 +586,29 @@ test("markLive throws a typed not found error when the session is missing", asyn
       error instanceof SessionNotFoundError &&
       /session-missing/.test((error as Error).message)
   );
+});
+
+test("markLive rejects completed sessions without changing their status", async () => {
+  let sessionUpdated = false;
+  const service = new SessionService(
+    createSessionRepositoryMock({
+      findById: async () => createSession({ status: SessionStatus.COMPLETE }),
+      update: async () => {
+        sessionUpdated = true;
+        return createSession({ status: SessionStatus.LIVE });
+      }
+    }),
+    createTrackRepositoryMock(),
+    createUploadTargetRepositoryMock(),
+    createStorageProviderMock()
+  );
+
+  await assert.rejects(
+    service.markLive("session-1"),
+    (error: unknown) =>
+      error instanceof SessionConflictError && /completed/i.test(error.message)
+  );
+  assert.equal(sessionUpdated, false);
 });
 
 test("getDownloadUrl throws a typed not found error when the track is missing", async () => {

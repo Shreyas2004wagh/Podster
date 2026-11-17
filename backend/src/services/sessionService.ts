@@ -191,6 +191,10 @@ export class SessionService implements ISessionService {
         throw new SessionNotFoundError(sessionId);
       }
 
+      if (session.status === SessionStatus.COMPLETE) {
+        throw new SessionConflictError("Completed sessions cannot accept new uploads");
+      }
+
       const [existingUploadTargets, incompleteTracks] = await Promise.all([
         this.uploadTargetRepository.findBySessionId(sessionId),
         this.trackRepository.findIncompleteTracks(sessionId)
@@ -475,6 +479,9 @@ export class SessionService implements ISessionService {
     const session = await this.sessionRepository.findById(sessionId);
     if (!session) {
       throw new SessionNotFoundError(sessionId);
+    }
+    if (session.status === SessionStatus.COMPLETE) {
+      throw new SessionConflictError("Completed sessions cannot be started");
     }
     if (session.status !== SessionStatus.LIVE) {
       await this.sessionRepository.update(sessionId, { status: SessionStatus.LIVE });
