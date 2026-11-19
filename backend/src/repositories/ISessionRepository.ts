@@ -21,6 +21,7 @@ export interface UpdateSessionInput {
 export interface CreateTrackInput {
   sessionId: SessionId;
   userId: UserId;
+  uploadId?: string;
   kind: Track['kind'];
   objectKey: string;
 }

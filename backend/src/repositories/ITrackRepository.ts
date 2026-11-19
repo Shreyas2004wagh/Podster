@@ -9,6 +9,7 @@ export type UserId = string;
 export interface CreateTrackInput {
   sessionId: SessionId;
   userId: UserId;
+  uploadId?: string;
   kind: Track['kind'];
   objectKey: string;
 }

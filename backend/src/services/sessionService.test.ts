@@ -45,6 +45,7 @@ function createTrack(overrides: Partial<Track> = {}): Track {
     id: "track-1",
     sessionId: "session-1",
     userId: "guest-1",
+    uploadId: null,
     kind: TrackKind.VIDEO,
     objectKey: "sessions/session-1/guest-1/track.webm",
     createdAt: new Date("2026-03-17T04:00:00.000Z"),
@@ -168,7 +169,12 @@ test("requestUploadUrls marks the session as uploading and persists upload metad
   });
   const trackRepository = createTrackRepositoryMock({
     create: async (input) => {
-      const track = createTrack({ sessionId: input.sessionId, userId: input.userId, objectKey: input.objectKey });
+      const track = createTrack({
+        sessionId: input.sessionId,
+        userId: input.userId,
+        uploadId: input.uploadId,
+        objectKey: input.objectKey
+      });
       createdTracks.push(track);
       return track;
     }
@@ -205,6 +211,7 @@ test("requestUploadUrls marks the session as uploading and persists upload metad
   assert.equal(createdTargets[0]?.sessionId, "session-1");
   assert.equal(createdTracks.length, 1);
   assert.equal(createdTracks[0]?.userId, "guest-1");
+  assert.equal(createdTracks[0]?.uploadId, "upload-1");
   assert.equal(createdTargets[0]?.partCount, 2);
   assert.ok(createdTargets[0]!.expiresAt.getTime() - Date.now() >= 59 * 60 * 1000);
 });
@@ -537,6 +544,48 @@ test("completeUpload is idempotent when the track was already marked complete", 
   assert.deepEqual(deletedTargetIds, ["target-1"]);
   assert.deepEqual(updatedStatuses, [SessionStatus.COMPLETE]);
   assert.equal(result?.tracks[0]?.completedAt?.toISOString(), "2026-03-17T04:10:00.000Z");
+});
+
+test("completeUpload is idempotent after upload target metadata is removed", async () => {
+  let storageCompletionCalls = 0;
+
+  const service = new SessionService(
+    createSessionRepositoryMock({
+      findByIdWithTracks: async () =>
+        Object.assign(createSession({ status: SessionStatus.COMPLETE }), {
+          tracks: [
+            createTrack({
+              userId: "guest-1",
+              uploadId: "upload-1",
+              completedAt: new Date("2026-03-17T04:10:00.000Z")
+            })
+          ]
+        })
+    }),
+    createTrackRepositoryMock({
+      findIncompleteTracks: async () => []
+    }),
+    createUploadTargetRepositoryMock({
+      findByUploadId: async () => null,
+      findBySessionId: async () => []
+    }),
+    createStorageProviderMock({
+      completeMultipartUpload: async () => {
+        storageCompletionCalls += 1;
+      }
+    })
+  );
+
+  const result = await service.completeUpload(
+    "session-1",
+    "upload-1",
+    [{ partNumber: 1, etag: "etag-1" }],
+    "guest-1"
+  );
+
+  assert.equal(storageCompletionCalls, 0);
+  assert.equal(result?.status, SessionStatus.COMPLETE);
+  assert.equal(result?.tracks[0]?.uploadId, "upload-1");
 });
 
 test("completeUpload rejects malformed multipart part lists", async () => {

@@ -69,6 +69,7 @@ export function createInMemorySessionService(): ISessionService {
         id: randomUUID(),
         sessionId: input.sessionId,
         userId: input.userId,
+        uploadId: input.uploadId ?? null,
         kind: input.kind,
         objectKey: input.objectKey,
         createdAt: new Date(),

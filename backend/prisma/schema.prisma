@@ -32,6 +32,7 @@ model Track {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   sessionId   String   @map("session_id") @db.Uuid
   userId      String   @map("user_id") @db.VarChar(255)
+  uploadId    String?  @unique @map("upload_id") @db.VarChar(255)
   kind        TrackKind
   objectKey   String   @map("object_key") @db.VarChar(500)
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)

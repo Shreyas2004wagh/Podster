@@ -258,6 +258,7 @@ export class SessionService implements ISessionService {
         const trackInput: CreateTrackInput = {
           sessionId,
           userId: uploaderId,
+          uploadId,
           kind: TrackKind.VIDEO,
           objectKey: key
         };
@@ -352,6 +353,18 @@ export class SessionService implements ISessionService {
 
       const uploadTarget = await this.uploadTargetRepository.findByUploadId(uploadId);
       if (!uploadTarget) {
+        const completedTrack = session.tracks.find(
+          (existingTrack) => existingTrack.uploadId === uploadId && Boolean(existingTrack.completedAt)
+        );
+        if (completedTrack) {
+          if (completedTrack.userId !== uploaderId) {
+            throw new UploadOwnershipError(uploadId);
+          }
+
+          await this.syncSessionUploadStatus(sessionId, session.status);
+          return this.sessionRepository.findByIdWithTracks(sessionId);
+        }
+
         this.logger.warn({
           event: "upload_completion_target_missing",
           sessionId,

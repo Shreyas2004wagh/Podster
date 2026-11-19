@@ -91,6 +91,7 @@ export class PrismaSessionRepository implements ISessionRepository {
       data: {
         sessionId: input.sessionId,
         userId: input.userId,
+        uploadId: input.uploadId,
         kind: input.kind,
         objectKey: input.objectKey,
       },
