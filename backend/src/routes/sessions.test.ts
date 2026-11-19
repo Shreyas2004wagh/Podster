@@ -93,6 +93,18 @@ test("session HTTP lifecycle completes and then rejects further mutations", asyn
   assert.equal(completeResponse.statusCode, 200);
   assert.equal(completeResponse.json().status, SessionStatus.COMPLETE);
 
+  const retryCompleteResponse = await app.inject({
+    method: "POST",
+    url: `/sessions/${sessionId}/complete-upload`,
+    headers: { cookie: guestCookie },
+    payload: {
+      uploadId: upload.uploadId,
+      parts: [{ partNumber: 1, etag: "etag-1" }]
+    }
+  });
+  assert.equal(retryCompleteResponse.statusCode, 200);
+  assert.equal(retryCompleteResponse.json().status, SessionStatus.COMPLETE);
+
   const [restartResponse, newUploadResponse, lateJoinResponse] = await Promise.all([
     app.inject({
       method: "POST",
