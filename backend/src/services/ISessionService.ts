@@ -32,8 +32,11 @@ export interface ISessionService {
    */
   markLive(sessionId: SessionId): Promise<Session | null>;
 
+  /** Close the session after the host has collected the recordings. */
+  finishSession(sessionId: SessionId): Promise<Session>;
+
   /**
-   * Complete multipart upload and finalize session
+   * Complete a participant's multipart upload
    */
   completeUpload(
     sessionId: SessionId,

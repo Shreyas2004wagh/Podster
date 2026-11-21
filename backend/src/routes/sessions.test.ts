@@ -32,7 +32,7 @@ function getAuthCookie(headers: OutgoingHttpHeaders) {
   return cookieHeader.split(";")[0];
 }
 
-test("session HTTP lifecycle completes and then rejects further mutations", async (t) => {
+test("host can finish the session after staggered participant uploads", async (t) => {
   const app = await createTestApp(t, createInMemorySessionService());
 
   const createResponse = await app.inject({
@@ -45,6 +45,12 @@ test("session HTTP lifecycle completes and then rejects further mutations", asyn
   const sessionId = created.session.id;
   const hostCookie = getAuthCookie(createResponse.headers);
   assert.equal(created.session.status, SessionStatus.DRAFT);
+  const requestFinish = (cookie: string) => app.inject({
+    method: "POST",
+    url: `/sessions/${sessionId}/finish`,
+    headers: { cookie }
+  });
+  assert.equal((await requestFinish(hostCookie)).statusCode, 409);
 
   const joinResponse = await app.inject({
     method: "POST",
@@ -53,6 +59,9 @@ test("session HTTP lifecycle completes and then rejects further mutations", asyn
   });
   assert.equal(joinResponse.statusCode, 200);
   const guestCookie = getAuthCookie(joinResponse.headers);
+  assert.equal((await requestFinish(guestCookie)).statusCode, 401);
+  const otherHostToken = app.issueHostToken({ hostId: "host-other", hostName: "Other host" });
+  assert.equal((await requestFinish(`podster_token=${otherHostToken}`)).statusCode, 403);
 
   const startResponse = await app.inject({
     method: "POST",
@@ -91,7 +100,35 @@ test("session HTTP lifecycle completes and then rejects further mutations", asyn
     }
   });
   assert.equal(completeResponse.statusCode, 200);
-  assert.equal(completeResponse.json().status, SessionStatus.COMPLETE);
+  assert.equal(completeResponse.json().status, SessionStatus.UPLOADING);
+  assert.ok(completeResponse.json().tracks[0]?.completedAt);
+
+  const hostUploadResponse = await app.inject({
+    method: "POST",
+    url: `/sessions/${sessionId}/upload-urls`,
+    headers: { cookie: hostCookie },
+    payload: { partCount: 1 }
+  });
+  assert.equal(hostUploadResponse.statusCode, 200);
+  assert.equal((await requestFinish(hostCookie)).statusCode, 409);
+
+  const hostCompleteResponse = await app.inject({
+    method: "POST",
+    url: `/sessions/${sessionId}/complete-upload`,
+    headers: { cookie: hostCookie },
+    payload: {
+      uploadId: hostUploadResponse.json().uploadId,
+      parts: [{ partNumber: 1, etag: "host-etag" }]
+    }
+  });
+  assert.equal(hostCompleteResponse.statusCode, 200);
+  assert.equal(hostCompleteResponse.json().status, SessionStatus.UPLOADING);
+
+  const finishResponse = await requestFinish(hostCookie);
+  assert.equal(finishResponse.statusCode, 200);
+  assert.equal(finishResponse.json().status, SessionStatus.COMPLETE);
+  assert.equal(finishResponse.json().tracks.length, 2);
+  assert.equal((await requestFinish(hostCookie)).statusCode, 200);
 
   const retryCompleteResponse = await app.inject({
     method: "POST",

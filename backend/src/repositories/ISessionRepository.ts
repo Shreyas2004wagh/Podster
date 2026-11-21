@@ -63,6 +63,9 @@ export interface ISessionRepository {
   findByIdWithAll(id: SessionId): Promise<SessionWithAll | null>;
   findByHostId(hostId: UserId): Promise<Session[]>;
   update(id: SessionId, input: UpdateSessionInput): Promise<Session>;
+  markLiveIfDraft(id: SessionId): Promise<void>;
+  registerUpload(track: CreateTrackInput, target: CreateUploadTargetInput): Promise<Track>;
+  finish(id: SessionId): Promise<SessionWithTracks>;
   delete(id: SessionId): Promise<void>;
   
   // Track operations within sessions

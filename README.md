@@ -229,6 +229,9 @@ pnpm -C backend build
 pnpm --filter @podster/backend test
 ```
 
+Set `PODSTER_TEST_DATABASE_URL` to a disposable database with all migrations applied to include
+the PostgreSQL upload registration and session closure test.
+
 Database:
 
 ```bash
@@ -247,7 +250,8 @@ Core backend endpoints:
 - `POST /sessions/:id/join` - join a session as a guest
 - `POST /sessions/:id/start` - mark a host session live
 - `POST /sessions/:id/upload-urls` - request signed multipart upload URLs
-- `POST /sessions/:id/complete-upload` - complete an uploaded track
+- `POST /sessions/:id/complete-upload` - complete an uploaded track and keep the session open
+- `POST /sessions/:id/finish` - close the session as host once recordings are uploaded
 - `GET /sessions/:id/tracks/:trackId/download` - get a signed track download URL
 - `GET /sessions/:id/recording` - get a signed URL for the latest completed video recording
 - `GET /api/sessions/:id/recording` - alternate latest-recording URL route

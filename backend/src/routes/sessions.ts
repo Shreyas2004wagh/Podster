@@ -394,6 +394,30 @@ export default fp(async (fastify) => {
   );
 
   fastify.post(
+    "/sessions/:id/finish",
+    { preHandler: fastify.authenticateHost },
+    async (request, reply) => {
+      const sessionId = (request.params as SessionParams).id;
+      try {
+        const session = await service.getSession(sessionId);
+        if (!session) {
+          return reply.code(404).send({ message: "Session not found" });
+        }
+        const user = request.user as AuthenticatedUser | undefined;
+        if (!user || user.role !== SessionRole.Host || user.sub !== session.hostId) {
+          return reply.code(403).send({ message: "Forbidden" });
+        }
+        return reply.send(await service.finishSession(sessionId));
+      } catch (err) {
+        request.log.error({ err }, "Failed to finish session");
+        return reply
+          .code(getErrorStatusCode(err))
+          .send({ message: err instanceof Error ? err.message : "Invalid request" });
+      }
+    }
+  );
+
+  fastify.post(
     "/sessions/:id/upload-urls",
     { preHandler: fastify.authenticateAny },
     async (request, reply) => {

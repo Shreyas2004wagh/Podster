@@ -201,10 +201,10 @@ export class SessionService implements ISessionService {
       ]);
 
       const incompleteTracksForUploader = incompleteTracks.filter((track) => track.userId === uploaderId);
-      const staleTrackKeys = new Set(incompleteTracksForUploader.map((track) => track.objectKey));
+      const pendingTrackKeys = new Set(incompleteTracksForUploader.map((track) => track.objectKey));
       const now = new Date();
       const activeUploadTarget = existingUploadTargets.find(
-        (target) => staleTrackKeys.has(target.key) && target.expiresAt > now
+        (target) => pendingTrackKeys.has(target.key) && target.expiresAt > now
       );
 
       if (activeUploadTarget) {
@@ -220,29 +220,10 @@ export class SessionService implements ISessionService {
         throw new SessionConflictError("An upload is already in progress for this participant");
       }
 
-      const staleUploadTargets = existingUploadTargets.filter((target) => staleTrackKeys.has(target.key));
-      if (staleUploadTargets.length > 0 || incompleteTracksForUploader.length > 0) {
-        await Promise.all([
-          ...staleUploadTargets.map((target) => this.uploadTargetRepository.delete(target.id)),
-          ...incompleteTracksForUploader.map((track) => this.trackRepository.delete(track.id))
-        ]);
-      }
-      
       const key = `sessions/${sessionId}/${uploaderId}/${Date.now()}.webm`;
       const { uploadId, urls } = await this.storage.createMultipartUpload({ key, partCount });
 
-      let statusChanged = false;
-      let createdUploadTargetId: string | null = null;
-      let createdTrackId: string | null = null;
-
       try {
-        if (session.status !== SessionStatus.UPLOADING) {
-          await this.sessionRepository.update(sessionId, {
-            status: SessionStatus.UPLOADING
-          });
-          statusChanged = true;
-        }
-
         const uploadTargetInput: CreateUploadTargetInput = {
           sessionId,
           uploadId,
@@ -252,9 +233,6 @@ export class SessionService implements ISessionService {
           expiresAt: new Date(Date.now() + UPLOAD_TARGET_TTL_SECONDS * 1000),
           partCount
         };
-        const uploadTarget = await this.uploadTargetRepository.create(uploadTargetInput);
-        createdUploadTargetId = uploadTarget.id;
-
         const trackInput: CreateTrackInput = {
           sessionId,
           userId: uploaderId,
@@ -262,8 +240,7 @@ export class SessionService implements ISessionService {
           kind: TrackKind.VIDEO,
           objectKey: key
         };
-        const track = await this.trackRepository.create(trackInput);
-        createdTrackId = track.id;
+        const track = await this.sessionRepository.registerUpload(trackInput, uploadTargetInput);
 
         const duration = Date.now() - startTime;
         this.logger.info({
@@ -277,38 +254,15 @@ export class SessionService implements ISessionService {
 
         return { uploadId, urls, trackId: track.id, objectKey: key };
       } catch (error) {
-        const rollbackOperations: Promise<unknown>[] = [
-          this.storage.abortMultipartUpload({ key, uploadId })
-        ];
-
-        if (createdTrackId) {
-          rollbackOperations.push(this.trackRepository.delete(createdTrackId));
-        }
-
-        if (createdUploadTargetId) {
-          rollbackOperations.push(this.uploadTargetRepository.delete(createdUploadTargetId));
-        }
-
-        if (statusChanged) {
-          rollbackOperations.push(
-            this.sessionRepository.update(sessionId, {
-              status: session.status
-            })
-          );
-        }
-
-        const rollbackResults = await Promise.allSettled(rollbackOperations);
-        const rollbackFailures = rollbackResults.filter((result) => result.status === "rejected");
-        if (rollbackFailures.length > 0) {
+        try {
+          await this.storage.abortMultipartUpload({ key, uploadId });
+        } catch (abortError) {
           this.logger.error({
             event: "upload_request_rollback_failed",
             sessionId,
             uploadId,
-            rollbackFailures: rollbackFailures.map((result) => ({
-              name: result.reason instanceof Error ? result.reason.name : "UnknownError",
-              message: result.reason instanceof Error ? result.reason.message : String(result.reason)
-            }))
-          }, "Rollback after upload request failure did not complete cleanly");
+            err: abortError
+          }, "Failed to abort multipart upload after registration failed");
         }
 
         throw error;
@@ -361,8 +315,7 @@ export class SessionService implements ISessionService {
             throw new UploadOwnershipError(uploadId);
           }
 
-          await this.syncSessionUploadStatus(sessionId, session.status);
-          return this.sessionRepository.findByIdWithTracks(sessionId);
+          return session;
         }
 
         this.logger.warn({
@@ -426,7 +379,6 @@ export class SessionService implements ISessionService {
         );
 
         await this.uploadTargetRepository.delete(uploadTarget.id);
-        await this.syncSessionUploadStatus(sessionId, session.status);
         return this.sessionRepository.findByIdWithTracks(sessionId);
       }
 
@@ -456,8 +408,6 @@ export class SessionService implements ISessionService {
 
       await this.uploadTargetRepository.delete(uploadTarget.id);
 
-      await this.syncSessionUploadStatus(sessionId, session.status);
-      
       const finalSession = await this.sessionRepository.findByIdWithTracks(sessionId);
       
       const duration = Date.now() - startTime;
@@ -489,17 +439,19 @@ export class SessionService implements ISessionService {
   }
 
   async markLive(sessionId: SessionId) {
-    const session = await this.sessionRepository.findById(sessionId);
+    await this.sessionRepository.markLiveIfDraft(sessionId);
+    const session = await this.sessionRepository.findByIdWithTracks(sessionId);
     if (!session) {
       throw new SessionNotFoundError(sessionId);
     }
     if (session.status === SessionStatus.COMPLETE) {
       throw new SessionConflictError("Completed sessions cannot be started");
     }
-    if (session.status !== SessionStatus.LIVE) {
-      await this.sessionRepository.update(sessionId, { status: SessionStatus.LIVE });
-    }
-    return this.sessionRepository.findByIdWithTracks(sessionId);
+    return session;
+  }
+
+  async finishSession(sessionId: SessionId) {
+    return this.sessionRepository.finish(sessionId);
   }
 
   async getDownloadUrl(sessionId: SessionId, trackId: string): Promise<string> {
@@ -609,26 +561,6 @@ export class SessionService implements ISessionService {
       case "s3":
       default:
         return StorageProvider.S3;
-    }
-  }
-
-  private async syncSessionUploadStatus(sessionId: SessionId, previousStatus: SessionStatus) {
-    const [incompleteTracks, remainingUploadTargets] = await Promise.all([
-      this.trackRepository.findIncompleteTracks(sessionId),
-      this.uploadTargetRepository.findBySessionId(sessionId)
-    ]);
-
-    if (incompleteTracks.length === 0 && remainingUploadTargets.length === 0) {
-      await this.sessionRepository.update(sessionId, {
-        status: SessionStatus.COMPLETE
-      });
-      return;
-    }
-
-    if (previousStatus !== SessionStatus.UPLOADING) {
-      await this.sessionRepository.update(sessionId, {
-        status: SessionStatus.UPLOADING
-      });
     }
   }
 }

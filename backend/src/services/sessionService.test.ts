@@ -80,6 +80,9 @@ function createSessionRepositoryMock(
     findByIdWithAll: async () => null,
     findByHostId: async () => [],
     update: async (_id, input) => createSession({ status: input.status }),
+    markLiveIfDraft: async () => undefined,
+    registerUpload: async (track) => createTrack(track),
+    finish: async () => ({ ...createSession({ status: SessionStatus.COMPLETE }), tracks: [] }),
     delete: async () => undefined,
     addTrack: async () => createTrack(),
     findTrackById: async () => null,
@@ -155,65 +158,34 @@ function createStorageProviderMock(overrides: Partial<IStorageProvider> = {}): I
   };
 }
 
-test("requestUploadUrls marks the session as uploading and persists upload metadata", async () => {
-  const updates: SessionStatus[] = [];
-  const createdTargets: UploadTarget[] = [];
-  const createdTracks: Track[] = [];
-
-  const sessionRepository = createSessionRepositoryMock({
-    findById: async () => createSession(),
-    update: async (_id, input) => {
-      updates.push(input.status ?? SessionStatus.DRAFT);
-      return createSession({ status: input.status ?? SessionStatus.DRAFT });
-    }
-  });
-  const trackRepository = createTrackRepositoryMock({
-    create: async (input) => {
-      const track = createTrack({
-        sessionId: input.sessionId,
-        userId: input.userId,
-        uploadId: input.uploadId,
-        objectKey: input.objectKey
-      });
-      createdTracks.push(track);
-      return track;
-    }
-  });
-  const uploadTargetRepository = createUploadTargetRepositoryMock({
-    create: async (input) => {
-        const target = createUploadTarget({
-          sessionId: input.sessionId,
-          uploadId: input.uploadId,
-          key: input.key,
-          bucket: input.bucket,
-          provider: input.provider,
-          partCount: input.partCount,
-          expiresAt: input.expiresAt
-        });
-        createdTargets.push(target);
-        return target;
-      }
-  });
-
+test("requestUploadUrls registers the track and target together", async () => {
+  let sessionRegistered = false;
   const service = new SessionService(
-    sessionRepository,
-    trackRepository,
-    uploadTargetRepository,
+    createSessionRepositoryMock({
+      findById: async () => createSession(),
+      registerUpload: async (track, target) => {
+        sessionRegistered = true;
+        assert.equal(track.sessionId, "session-1");
+        assert.equal(track.userId, "guest-1");
+        assert.equal(track.uploadId, "upload-1");
+        assert.equal(track.objectKey, target.key);
+        assert.equal(target.sessionId, track.sessionId);
+        assert.equal(target.uploadId, track.uploadId);
+        assert.equal(target.partCount, 2);
+        assert.ok(target.expiresAt.getTime() - Date.now() >= 59 * 60 * 1000);
+        return createTrack(track);
+      }
+    }),
+    createTrackRepositoryMock(),
+    createUploadTargetRepositoryMock(),
     createStorageProviderMock()
   );
 
   const result = await service.requestUploadUrls("session-1", "guest-1", 2);
 
+  assert.equal(sessionRegistered, true);
   assert.equal(result.uploadId, "upload-1");
   assert.deepEqual(result.urls, ["https://example.test/part-1", "https://example.test/part-2"]);
-  assert.deepEqual(updates, [SessionStatus.UPLOADING]);
-  assert.equal(createdTargets.length, 1);
-  assert.equal(createdTargets[0]?.sessionId, "session-1");
-  assert.equal(createdTracks.length, 1);
-  assert.equal(createdTracks[0]?.userId, "guest-1");
-  assert.equal(createdTracks[0]?.uploadId, "upload-1");
-  assert.equal(createdTargets[0]?.partCount, 2);
-  assert.ok(createdTargets[0]!.expiresAt.getTime() - Date.now() >= 59 * 60 * 1000);
 });
 
 test("requestUploadUrls rejects completed sessions before creating upload state", async () => {
@@ -283,126 +255,29 @@ test("requestUploadUrls rejects duplicate active uploads for the same participan
   assert.equal(storageCalled, false);
 });
 
-test("requestUploadUrls clears stale incomplete uploads before creating a fresh target", async () => {
-  const deletedTrackIds: string[] = [];
-  const deletedTargetIds: string[] = [];
-
+test("requestUploadUrls aborts the storage upload if registration loses a race with closure", async () => {
+  const abortedUploads: Array<{ key: string; uploadId: string }> = [];
+  const conflict = new SessionConflictError("Completed sessions cannot accept new uploads");
   const service = new SessionService(
     createSessionRepositoryMock({
-      findById: async () => createSession()
+      findById: async () => createSession(),
+      registerUpload: async () => { throw conflict; }
     }),
-    createTrackRepositoryMock({
-      findIncompleteTracks: async () => [
-        createTrack({
-          id: "track-stale",
-          userId: "guest-1",
-          objectKey: "sessions/session-1/guest-1/track.webm"
-        }),
-        createTrack({
-          id: "track-other",
-          userId: "guest-2",
-          objectKey: "sessions/session-1/guest-2/track.webm"
-        })
-      ],
-      delete: async (id) => {
-        deletedTrackIds.push(id);
-      }
-    }),
-    createUploadTargetRepositoryMock({
-      findBySessionId: async () => [
-        createUploadTarget({
-          id: "target-stale",
-          key: "sessions/session-1/guest-1/track.webm",
-          expiresAt: new Date("2026-03-17T03:00:00.000Z")
-        }),
-        createUploadTarget({
-          id: "target-other",
-          key: "sessions/session-1/guest-2/track.webm"
-        })
-      ],
-      delete: async (id) => {
-        deletedTargetIds.push(id);
-      }
-    }),
+    createTrackRepositoryMock(),
+    createUploadTargetRepositoryMock(),
     createStorageProviderMock({
-      createMultipartUpload: async () => ({
-        uploadId: "upload-2",
-        urls: ["https://example.test/part-1"]
-      })
+      abortMultipartUpload: async (request) => {
+        abortedUploads.push(request);
+      }
     })
   );
 
-  const result = await service.requestUploadUrls("session-1", "guest-1", 1);
-
-  assert.equal(result.uploadId, "upload-2");
-  assert.deepEqual(deletedTrackIds, ["track-stale"]);
-  assert.deepEqual(deletedTargetIds, ["target-stale"]);
-});
-
-test("requestUploadUrls rolls back storage and metadata when track creation fails", async () => {
-  const updatedStatuses: SessionStatus[] = [];
-  const deletedTargetIds: string[] = [];
-  const abortedUploads: Array<{ key: string; uploadId: string }> = [];
-  const originalDateNow = Date.now;
-  Date.now = () => 1_710_000_000_000;
-
-  try {
-    const service = new SessionService(
-      createSessionRepositoryMock({
-        findById: async () => createSession({ status: SessionStatus.DRAFT }),
-        update: async (_id, input) => {
-          updatedStatuses.push(input.status ?? SessionStatus.DRAFT);
-          return createSession({ status: input.status ?? SessionStatus.DRAFT });
-        }
-      }),
-      createTrackRepositoryMock({
-        create: async () => {
-          throw new Error("track create failed");
-        }
-      }),
-      createUploadTargetRepositoryMock({
-        create: async (input) =>
-          createUploadTarget({
-            id: "target-created",
-            sessionId: input.sessionId,
-            uploadId: input.uploadId,
-            key: input.key,
-            bucket: input.bucket,
-            provider: input.provider,
-            partCount: input.partCount,
-            expiresAt: input.expiresAt
-          }),
-        delete: async (id) => {
-          deletedTargetIds.push(id);
-        }
-      }),
-      createStorageProviderMock({
-        createMultipartUpload: async () => ({
-          uploadId: "upload-rollback",
-          urls: ["https://example.test/part-1"]
-        }),
-        abortMultipartUpload: async (request) => {
-          abortedUploads.push(request);
-        }
-      })
-    );
-
-    await assert.rejects(
-      service.requestUploadUrls("session-1", "guest-1", 1),
-      /track create failed/
-    );
-
-    assert.deepEqual(updatedStatuses, [SessionStatus.UPLOADING, SessionStatus.DRAFT]);
-    assert.deepEqual(deletedTargetIds, ["target-created"]);
-    assert.deepEqual(abortedUploads, [
-      {
-        key: "sessions/session-1/guest-1/1710000000000.webm",
-        uploadId: "upload-rollback"
-      }
-    ]);
-  } finally {
-    Date.now = originalDateNow;
-  }
+  await assert.rejects(
+    service.requestUploadUrls("session-1", "guest-1", 2),
+    (error) => error === conflict
+  );
+  assert.equal(abortedUploads.length, 1);
+  assert.equal(abortedUploads[0]?.uploadId, "upload-1");
 });
 
 test("completeUpload rejects uploads that do not belong to the authenticated user", async () => {
@@ -456,46 +331,7 @@ test("completeUpload rejects upload targets from a different session", async () 
   );
 });
 
-test("completeUpload keeps session uploading when other tracks remain pending", async () => {
-  const updatedStatuses: SessionStatus[] = [];
-
-  const service = new SessionService(
-    createSessionRepositoryMock({
-      findByIdWithTracks: async () =>
-        Object.assign(createSession({ status: SessionStatus.UPLOADING }), {
-          tracks: [
-            createTrack({ id: "track-1", userId: "guest-1" }),
-            createTrack({ id: "track-2", userId: "guest-2", objectKey: "sessions/session-1/guest-2/track.webm" })
-          ]
-        }),
-      update: async (_id, input) => {
-        updatedStatuses.push(input.status ?? SessionStatus.DRAFT);
-        return createSession({ status: input.status ?? SessionStatus.DRAFT });
-      }
-    }),
-    createTrackRepositoryMock({
-      findIncompleteTracks: async () => [createTrack({ id: "track-2", userId: "guest-2" })]
-    }),
-    createUploadTargetRepositoryMock({
-      findByUploadId: async () => createUploadTarget({ partCount: 1 })
-    }),
-    createStorageProviderMock()
-  );
-
-  const result = await service.completeUpload(
-    "session-1",
-    "upload-1",
-    [{ partNumber: 1, etag: "etag-1" }],
-    "guest-1"
-  );
-
-  assert.equal(updatedStatuses.includes(SessionStatus.COMPLETE), false);
-  assert.equal(updatedStatuses.includes(SessionStatus.UPLOADING), false);
-  assert.equal(result?.status, SessionStatus.UPLOADING);
-});
-
 test("completeUpload is idempotent when the track was already marked complete", async () => {
-  const updatedStatuses: SessionStatus[] = [];
   const deletedTargetIds: string[] = [];
   let storageCompletionCalls = 0;
 
@@ -510,11 +346,7 @@ test("completeUpload is idempotent when the track was already marked complete", 
               completedAt: new Date("2026-03-17T04:10:00.000Z")
             })
           ]
-        }),
-      update: async (_id, input) => {
-        updatedStatuses.push(input.status ?? SessionStatus.DRAFT);
-        return createSession({ status: input.status ?? SessionStatus.DRAFT });
-      }
+        })
     }),
     createTrackRepositoryMock({
       findIncompleteTracks: async () => []
@@ -542,7 +374,7 @@ test("completeUpload is idempotent when the track was already marked complete", 
 
   assert.equal(storageCompletionCalls, 0);
   assert.deepEqual(deletedTargetIds, ["target-1"]);
-  assert.deepEqual(updatedStatuses, [SessionStatus.COMPLETE]);
+  assert.equal(result?.status, SessionStatus.UPLOADING);
   assert.equal(result?.tracks[0]?.completedAt?.toISOString(), "2026-03-17T04:10:00.000Z");
 });
 
@@ -637,15 +469,13 @@ test("markLive throws a typed not found error when the session is missing", asyn
   );
 });
 
-test("markLive rejects completed sessions without changing their status", async () => {
-  let sessionUpdated = false;
+test("markLive rejects completed sessions", async () => {
   const service = new SessionService(
     createSessionRepositoryMock({
-      findById: async () => createSession({ status: SessionStatus.COMPLETE }),
-      update: async () => {
-        sessionUpdated = true;
-        return createSession({ status: SessionStatus.LIVE });
-      }
+      findByIdWithTracks: async () => ({
+        ...createSession({ status: SessionStatus.COMPLETE }),
+        tracks: []
+      })
     }),
     createTrackRepositoryMock(),
     createUploadTargetRepositoryMock(),
@@ -657,7 +487,6 @@ test("markLive rejects completed sessions without changing their status", async 
     (error: unknown) =>
       error instanceof SessionConflictError && /completed/i.test(error.message)
   );
-  assert.equal(sessionUpdated, false);
 });
 
 test("getDownloadUrl throws a typed not found error when the track is missing", async () => {

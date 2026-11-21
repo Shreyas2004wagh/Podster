@@ -9,6 +9,7 @@ import type { ISessionRepository } from "../repositories/ISessionRepository.js";
 import type { ITrackRepository } from "../repositories/ITrackRepository.js";
 import type { IUploadTargetRepository } from "../repositories/IUploadTargetRepository.js";
 import type { ISessionService } from "../services/ISessionService.js";
+import { SessionConflictError, SessionNotFoundError } from "../services/errors.js";
 import { SessionService } from "../services/sessionService.js";
 import type { IStorageProvider } from "../storage/storageProvider.js";
 
@@ -54,12 +55,36 @@ export function createInMemorySessionService(): ISessionService {
     },
     findById: async (id) => sessions.get(id) ?? null,
     findByIdWithTracks: async (id) => findSessionWithTracks(id),
-    update: async (id, input) => {
+    markLiveIfDraft: async (id) => {
       const session = sessions.get(id);
-      if (!session) throw new Error(`Missing session ${id}`);
-      const updated = Object.assign(session, input, { updatedAt: new Date() });
-      sessions.set(id, updated);
-      return updated;
+      if (session?.status === SessionStatus.DRAFT) {
+        sessions.set(id, { ...session, status: SessionStatus.LIVE });
+      }
+    },
+    registerUpload: async (track, target) => {
+      const session = sessions.get(track.sessionId);
+      if (!session) throw new SessionNotFoundError(track.sessionId);
+      if (session.status === SessionStatus.COMPLETE) {
+        throw new SessionConflictError("Completed sessions cannot accept new uploads");
+      }
+      await uploadTargetRepository.create(target);
+      const created = await trackRepository.create(track);
+      sessions.set(session.id, { ...session, status: SessionStatus.UPLOADING });
+      return created;
+    },
+    finish: async (id) => {
+      const session = findSessionWithTracks(id);
+      if (!session) throw new SessionNotFoundError(id);
+      if (session.status === SessionStatus.COMPLETE) return session;
+      const hasCompletedTrack = session.tracks.some((track) => track.completedAt);
+      const hasPendingUpload = session.tracks.some((track) => !track.completedAt) ||
+        [...uploadTargets.values()].some((target) => target.sessionId === id);
+      if (!hasCompletedTrack || hasPendingUpload) {
+        throw new SessionConflictError("Recordings are not ready");
+      }
+      const finished = { ...session, status: SessionStatus.COMPLETE };
+      sessions.set(id, finished);
+      return finished;
     }
   });
 
