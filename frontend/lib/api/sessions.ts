@@ -52,6 +52,10 @@ export async function startSession(sessionId: SessionId) {
   });
 }
 
+export async function finishSession(sessionId: SessionId) {
+  return apiFetch<Session>(`/sessions/${sessionId}/finish`, { method: "POST" });
+}
+
 export async function getDownloadUrl(
   sessionId: SessionId,
   trackId: string

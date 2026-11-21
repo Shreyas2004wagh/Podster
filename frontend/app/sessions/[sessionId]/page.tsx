@@ -6,7 +6,8 @@ import type { Session } from "@podster/shared";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { getDownloadUrl, getRecordingUrl, getSession } from "@/lib/api/sessions";
+import { finishSession, getDownloadUrl, getRecordingUrl, getSession } from "@/lib/api/sessions";
+import { getViewerSession } from "@/lib/session/viewer";
 
 export default function SessionDashboardPage() {
   const params = useParams<{ sessionId: string }>();
@@ -15,6 +16,9 @@ export default function SessionDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isFinishing, setIsFinishing] = useState(false);
+  const [viewerId, setViewerId] = useState<string | null>(null);
+  const [finishError, setFinishError] = useState<string | null>(null);
   const loadSessionAbortRef = useRef<AbortController | null>(null);
   const isRefreshingRef = useRef(false);
 
@@ -22,6 +26,28 @@ export default function SessionDashboardPage() {
     () => session?.tracks?.filter((track) => Boolean(track.completedAt)).length ?? 0,
     [session]
   );
+  const showFinishControl =
+    viewerId !== null && viewerId === session?.hostId && session.status.toLowerCase() !== "complete";
+  const uploadsReady = completedTrackCount > 0 && completedTrackCount === session?.tracks?.length;
+
+  async function handleFinish() {
+    if (!window.confirm("Has everyone finished uploading? Finishing closes this session to new uploads and guests.")) {
+      return;
+    }
+
+    setIsFinishing(true);
+    setFinishError(null);
+    try {
+      const finished = await finishSession(sessionId);
+      loadSessionAbortRef.current?.abort();
+      setSession(finished);
+    } catch (err) {
+      setFinishError((err as Error).message);
+      void loadSession(true);
+    } finally {
+      setIsFinishing(false);
+    }
+  }
 
   const loadSession = useCallback(
     async (showSpinner: boolean) => {
@@ -69,6 +95,7 @@ export default function SessionDashboardPage() {
   useEffect(() => {
     if (!sessionId) return;
 
+    setViewerId(getViewerSession(sessionId)?.userId ?? null);
     void loadSession(true);
     const interval = window.setInterval(() => {
       void loadSession(false);
@@ -90,7 +117,7 @@ export default function SessionDashboardPage() {
         </div>
         <div className="flex items-center gap-2">
           <Badge>{session?.status ?? "loading"}</Badge>
-          <Button variant="ghost" size="sm" onClick={() => void loadSession(true)} disabled={!sessionId || isRefreshing}>
+          <Button variant="ghost" size="sm" onClick={() => void loadSession(true)} disabled={!sessionId || isRefreshing || isFinishing}>
             {isRefreshing ? "Refreshing..." : "Refresh"}
           </Button>
           <Button
@@ -113,6 +140,21 @@ export default function SessionDashboardPage() {
       </div>
 
       {error && <p className="text-sm text-red-200">{error}</p>}
+
+      {showFinishControl && (
+        <Card>
+          <p className="mb-3 text-sm text-slate-300">
+            Confirm everyone has uploaded their recordings before finishing the session.
+          </p>
+          <Button
+            disabled={isRefreshing || isFinishing || !uploadsReady}
+            onClick={() => void handleFinish()}
+          >
+            {isFinishing ? "Finishing..." : "Finish session"}
+          </Button>
+          {finishError && <p role="alert" className="mt-3 text-sm text-red-200">{finishError}</p>}
+        </Card>
+      )}
 
       <Card>
         <h3 className="text-lg font-semibold text-white">Tracks</h3>

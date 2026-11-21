@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -455,7 +456,14 @@ export default function RecordingRoomPage() {
             Live WebRTC stays separate; MediaRecorder captures locally, then uploads after stop.
           </p>
         </div>
-        <Badge>Local capture</Badge>
+        <div className="flex items-center gap-3">
+          {isHost && !isRecording && !isProcessing && !isUploadActive && !uploadId && !hasStoredChunks && (
+            <Link className="text-sm text-slate-200 underline" href={`/sessions/${sessionId}`}>
+              Session dashboard
+            </Link>
+          )}
+          <Badge>Local capture</Badge>
+        </div>
       </div>
 
       <Card>

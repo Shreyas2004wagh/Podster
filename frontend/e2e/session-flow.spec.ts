@@ -78,6 +78,7 @@ test("host can create a session and reach the recording room", async ({ page }) 
 
   await page.waitForURL(/\/sessions\/session-host\/record$/, { timeout: 15_000 });
   await expect(page.getByRole("button", { name: /start session and record/i })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Session dashboard" })).toHaveAttribute("href", "/sessions/session-host");
   await expect(page.getByText(/only the host can start the session/i)).toHaveCount(0);
 });
 
@@ -341,4 +342,38 @@ test("dashboard refresh pulls in newly completed tracks", async ({ page }) => {
   await expect(page.getByText(/1 completed track available/i)).toBeVisible();
   await expect(page.getByText(/sessions\/session-dashboard\/host-1\/final\.webm/i)).toBeVisible();
   await expect(page.getByRole("button", { name: /open latest recording/i })).toBeEnabled();
+});
+
+test("host can confirm session closure from the dashboard", async ({ page }) => {
+  const sessionId = "session-finish";
+  const session = {
+    ...buildSession(sessionId, "Final take", "host-1"),
+    status: "UPLOADING",
+    tracks: [{
+      id: "track-1",
+      sessionId,
+      userId: "host-1",
+      kind: "VIDEO",
+      objectKey: "final.webm",
+      completedAt: new Date("2026-03-20T00:05:00.000Z").toISOString()
+    }]
+  };
+  await page.addInitScript(({ key, value }) => {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  }, seedViewer(sessionId, { sessionId, userId: "host-1", role: "host", name: "Host" }));
+  await page.route(`http://localhost:4000/sessions/${sessionId}`, (route) => route.fulfill({ json: session }));
+  await page.route(`http://localhost:4000/sessions/${sessionId}/finish`, async (route) => {
+    expect(route.request().method()).toBe("POST");
+    await route.fulfill({ json: { ...session, status: "COMPLETE" } });
+  });
+
+  await page.goto(`/sessions/${sessionId}`);
+  const finish = page.getByRole("button", { name: "Finish session" });
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await finish.click();
+  await expect(finish).toBeEnabled();
+  page.once("dialog", (dialog) => dialog.accept());
+  await finish.click();
+  await expect(page.getByText("COMPLETE", { exact: true })).toBeVisible();
+  await expect(finish).toHaveCount(0);
 });
